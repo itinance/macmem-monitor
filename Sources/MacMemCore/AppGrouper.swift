@@ -16,7 +16,7 @@ public struct AppGrouper {
         var groups: [String: Acc] = [:]
 
         for s in samples {
-            let owner = resolveOwner(s, byPID: byPID, depth: 0)
+            let owner = resolveOwner(s, byPID: byPID)
             let key = owner.bundleID ?? owner.name
             if var acc = groups[key] {
                 acc.total += s.footprintBytes
@@ -37,10 +37,14 @@ public struct AppGrouper {
             .map { $0 }
     }
 
-    func resolveOwner(_ s: ProcessSample, byPID: [Int32: ProcessSample],
-                      depth: Int) -> (name: String, bundleID: String?) {
-        if depth < 8, let rpid = s.responsiblePID, rpid != s.pid, let owner = byPID[rpid] {
-            return resolveOwner(owner, byPID: byPID, depth: depth + 1)
+    private func resolveOwner(_ s: ProcessSample, byPID: [Int32: ProcessSample],
+                              visited: Set<Int32> = []) -> (name: String, bundleID: String?) {
+        var visited = visited
+        guard visited.insert(s.pid).inserted else {
+            return (Self.cleanName(s.name), s.bundleID.map(Self.baseBundleID))
+        }
+        if let rpid = s.responsiblePID, rpid != s.pid, let owner = byPID[rpid] {
+            return resolveOwner(owner, byPID: byPID, visited: visited)
         }
         return (Self.cleanName(s.name), s.bundleID.map(Self.baseBundleID))
     }
