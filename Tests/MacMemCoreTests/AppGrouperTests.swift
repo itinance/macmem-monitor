@@ -49,6 +49,9 @@ final class AppGrouperTests: XCTestCase {
             sample(2, name: "B", bundle: "com.b", footprint: 10, responsible: 1),
         ]
         let groups = AppGrouper().group(samples, topN: 10)
-        XCTAssertEqual(groups.reduce(0) { $0 + Int($1.totalFootprintBytes) }, 20)
+        let inputTotal = samples.reduce(0) { $0 + Int($1.footprintBytes) }
+        let groupedTotal = groups.reduce(0) { $0 + Int($1.totalFootprintBytes) }
+        XCTAssertEqual(groupedTotal, inputTotal)   // no process dropped or double-counted
+        XCTAssertEqual(groupedTotal, 20)
     }
 }
