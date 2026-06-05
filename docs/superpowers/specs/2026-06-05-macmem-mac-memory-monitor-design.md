@@ -19,7 +19,7 @@ It ships as two front-ends over one shared engine: a **CLI** and a **MenuBar app
 macOS does not cleanly expose two things this tool wants, so both are explicitly handled as **estimates with confidence**, never presented as measured truth:
 
 - **Per-tab memory:** the browser knows which renderer process serves which tab, but does not expose that mapping. We read tab URLs via AppleScript and read renderer process memory via `libproc`, then **heuristically map** renderers→tabs by window/process ordering. Ambiguous mappings are left blank rather than guessed, and every estimate carries a confidence marker.
-- **Per-process swap:** macOS exposes total swap (`sysctl vm.swapusage`) but not per-process swap bytes. We report the accurate total plus a **heuristic ranking of likely culprits** from `libproc` signals (page-ins, footprint-vs-resident delta, compressed memory), labeled as estimates.
+- **Per-process swap:** macOS exposes total swap (`sysctl vm.swapusage`) but not per-process swap bytes. We report the accurate total plus a **heuristic ranking of likely culprits** from `libproc` signals (page-ins, footprint-vs-resident delta, compressed memory), labeled as estimates. Caveat: `ri_pageins` counts *file + anonymous* page-ins, not swap-ins specifically, so it is a **noisy proxy** for swap activity — acceptable only because the whole culprit section is explicitly an estimate.
 
 A `MemoryProvider` protocol abstracts the data source. The default is the **native** implementation (approach A). A **shell-out** implementation (approach B: `ps`/`top`/`vm_stat`) can be added behind the same protocol later if native APIs prove insufficient — without touching the rest of the system.
 
@@ -59,7 +59,7 @@ CLI and MenuBar are sibling directories/targets in one branch (not git branches)
 
 **Data source (behind a protocol):**
 - `MemoryProvider` (protocol) — the seam between the engine and the OS.
-- `NativeMemoryProvider` (default, approach A): `proc_listpids` + `proc_pid_rusage` → `ri_phys_footprint` for per-process memory; `sysctl vm.swapusage` for swap. `phys_footprint` is chosen deliberately because it matches Activity Monitor's "Memory" column, so totals feel correct to users.
+- `NativeMemoryProvider` (default, approach A): `proc_listpids` + `proc_pid_rusage` → `ri_phys_footprint` for per-process memory. `phys_footprint` is chosen deliberately because it matches Activity Monitor's "Memory" column, so totals feel correct to users. **Swap uses two sources:** `sysctl vm.swapusage` for the total/used/free figures, and `host_statistics64(HOST_VM_INFO64)` (equivalently `vm_stat`) for the **swap-in/swap-out counters** — `vm.swapusage` does *not* expose ins/outs.
 - `ShellMemoryProvider` (future, approach B): same protocol, parses `ps`/`top`/`vm_stat`.
 
 **Domain models (value types):**
@@ -71,8 +71,10 @@ CLI and MenuBar are sibling directories/targets in one branch (not git branches)
 - `MemorySnapshot` — top apps, `SwapInfo` + culprits, top tabs, plus **per-section status** (ok / partial / permissionNeeded) and counts of unreadable processes.
 
 **Engine components:**
-- `AppGrouper` — collapses helper/renderer processes into their parent app via **responsible-PID + bundle identifier**, sums footprints, returns top-N `AppGroup`s.
-- `SwapEstimator` — accurate total from `vm.swapusage`; ranks likely culprits from `libproc` signals; assigns confidence.
+- `AppGrouper` — collapses helper/renderer processes into their parent app, sums footprints, returns top-N `AppGroup`s. Grouping uses a **layered strategy**:
+  - *Preferred:* responsible PID, obtained via `responsibility_get_pid_responsible_for_pid()`. **This is a private/undocumented `libsystem` symbol** — there is **no** public `pbi_*` responsible-pid field in `sys/proc_info.h`. It gives the best grouping (correctly attributing e.g. XPC helpers to the responsible app) but is a code-signing/notarization risk and can break across OS releases. It is isolated behind a single function so it can be disabled or removed.
+  - *Documented fallback (always available):* group by **bundle identifier**, then by **parent PID / executable-path prefix**. The tool must produce correct top-N groups using only this public path; the private responsible-PID lookup is a refinement, not a dependency.
+- `SwapEstimator` — accurate total from `vm.swapusage` and system-wide swap-in/out counters from `host_statistics64`; ranks likely culprits from `libproc` signals, treating `ri_pageins` as a **noisy proxy** (file + anonymous page-ins, not swap-specific); assigns confidence accordingly.
 - `BrowserInspector` — AppleScript bridge per supported browser (Safari + Chromium) for tab URLs/titles; heuristic renderer↔tab mapping with confidence; returns top-N tabs.
 - `SnapshotBuilder` — orchestrates provider + grouper + estimator + inspector into one `MemorySnapshot`. Each section is computed **independently**: a failure in one yields a partial snapshot with that section's status set, never a crash.
 
