@@ -1,3 +1,3 @@
 import MacMemCore
 
-print("macmem \(MacMemCore.version)")
+print("macmem (CLI wiring added in Task 11)")
