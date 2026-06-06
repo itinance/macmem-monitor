@@ -73,6 +73,17 @@ final class BrowserInspectorTests: XCTestCase {
         XCTAssertEqual(tabs.count, 1)
     }
 
+    // Fix 6 (Critical): negative topN must not trap — must return empty array.
+    func testNegativeTopNReturnsEmpty() {
+        let source = FakeTabSource(byBrowser: [
+            "Brave": [RawTab(title: "A", url: "https://a.com", windowIndex: 0, tabIndex: 0)],
+        ])
+        var ignored = false
+        let tabs = BrowserInspector(source: source)
+            .topTabs(rendererFootprintsByBrowser: [:], topN: -1, hadErrors: &ignored)
+        XCTAssertEqual(tabs.count, 0)
+    }
+
     func testCountMismatchLeavesEstimatesBlank() {
         let source = FakeTabSource(byBrowser: [
             "Brave": [RawTab(title: "A", url: "https://a.com", windowIndex: 0, tabIndex: 0),

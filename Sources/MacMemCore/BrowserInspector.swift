@@ -19,6 +19,7 @@ public struct BrowserInspector {
     public func topTabs(rendererFootprintsByBrowser: [String: [UInt64]] = [:],
                         topN: Int = 10,
                         hadErrors: inout Bool) -> [BrowserTab] {
+        let limit = max(0, topN)
         var all: [BrowserTab] = []
 
         for browser in source.runningBrowsers() {
@@ -47,7 +48,7 @@ public struct BrowserInspector {
         // Heaviest first when estimates exist; tabs without estimates sort last.
         return all
             .sorted { ($0.estimatedBytes ?? 0) > ($1.estimatedBytes ?? 0) }
-            .prefix(topN)
+            .prefix(limit)
             .map { $0 }
     }
 }

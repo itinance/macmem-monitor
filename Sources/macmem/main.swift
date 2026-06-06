@@ -31,6 +31,9 @@ struct Macmem: ParsableCommand {
     var browser: String?
 
     func validate() throws {
+        if top < 0 {
+            throw ValidationError("--top must be >= 0.")
+        }
         if let b = browser, SupportedBrowsers.canonical(b) == nil {
             throw ValidationError("Unsupported browser '\(b)'. Supported: \(SupportedBrowsers.all.joined(separator: ", ")).")
         }
