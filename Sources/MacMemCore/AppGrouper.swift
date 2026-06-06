@@ -53,8 +53,12 @@ public struct AppGrouper {
             return (Self.cleanName(s.name), s.bundleID.map(Self.baseBundleID))
         }
         // Step 3: PPID fallback — fold bundle-less children into their launching app.
-        // Guard: ppid must be > 1 (skip launchd) and parent must exist in readable samples.
-        if s.ppid > 1, let parent = byPID[s.ppid] {
+        // Guard: ppid must be > 1 (skip launchd (PID 1) and the kernel (PID 0)), the parent
+        // must exist in readable samples, AND the parent must have a bundle ID (i.e. be an
+        // actual app).  Stopping at a bundle-less parent prevents shell-chain attribution:
+        // a user process launched inside a terminal shell stays its own group rather than
+        // being buried under the terminal app.
+        if s.ppid > 1, let parent = byPID[s.ppid], parent.bundleID != nil {
             return resolveOwner(parent, byPID: byPID, visited: visited)
         }
         // Step 4: no usable owner signal — return the process under its own name.
