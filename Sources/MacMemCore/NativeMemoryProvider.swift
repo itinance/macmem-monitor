@@ -3,7 +3,10 @@ import AppKit
 import Darwin
 
 public struct NativeMemoryProvider: MemoryProvider {
-    public init() {}
+    public let useResponsiblePID: Bool
+    public init(useResponsiblePID: Bool = false) {
+        self.useResponsiblePID = useResponsiblePID
+    }
 
     // MARK: Processes
 
@@ -19,13 +22,13 @@ public struct NativeMemoryProvider: MemoryProvider {
             let bundleID = appIdentity[pid]?.bundleID ?? Self.bundleID(forPath: path)
 
             if let usage = Self.rusage(for: pid) {
-                return ProcessSample(pid: pid, ppid: parentPID, responsiblePID: nil,
+                return ProcessSample(pid: pid, ppid: parentPID, responsiblePID: ResponsiblePID.lookup(for: pid, enabled: useResponsiblePID),
                                      bundleID: bundleID, name: name, executablePath: path,
                                      footprintBytes: usage.footprint, residentBytes: usage.resident,
                                      pageIns: usage.pageIns, isReadable: true)
             } else {
                 // Not owned by us / not permitted: still list it, marked unreadable.
-                return ProcessSample(pid: pid, ppid: parentPID, responsiblePID: nil,
+                return ProcessSample(pid: pid, ppid: parentPID, responsiblePID: ResponsiblePID.lookup(for: pid, enabled: useResponsiblePID),
                                      bundleID: bundleID, name: name, executablePath: path,
                                      footprintBytes: 0, residentBytes: 0, pageIns: 0, isReadable: false)
             }
