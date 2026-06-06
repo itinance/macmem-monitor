@@ -34,6 +34,7 @@ public struct SnapshotBuilder {
         var swap: SwapInfo?
         var compressedUsers: [CompressedMemoryEntry] = []
         var swapStatus: SectionStatus = .ok
+        var compressedUnreadable = 0
         if includeSwap {
             do {
                 swap = try provider.readSwap()
@@ -43,9 +44,12 @@ public struct SnapshotBuilder {
             // Compressed memory is meaningful even when used swap is 0 (the compressor
             // holds compressed pages in RAM before any swap-out), so compute it regardless.
             compressedUsers = CompressedMemoryAggregator().entries(groups: topApps, samples: samples, topN: topN)
+            // Accessible processes (rusage readable) whose compressed footprint we still
+            // couldn't measure because task_for_pid was denied — exactly the gap `sudo`
+            // closes. Excludes hardened daemons that are unreadable to any user, which
+            // would otherwise inflate this into a misleading count.
+            compressedUnreadable = samples.filter { $0.isReadable && $0.compressedBytes == nil }.count
         }
-        // Processes whose compressed footprint we could not read (task_for_pid denied).
-        let compressedUnreadable = samples.filter { $0.compressedBytes == nil }.count
 
         // --- Tabs section ---
         var topTabs: [BrowserTab] = []

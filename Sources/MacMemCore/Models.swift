@@ -64,9 +64,9 @@ public struct SwapInfo: Sendable, Equatable, Codable {
     }
 }
 
-/// A measured per-app compressed-memory total. Unlike the old SwapCulprit this is
-/// NOT an estimate — it is the sum of task_info(TASK_VM_INFO).compressed across the
-/// app's readable processes.
+/// A measured per-app compressed-memory total: the sum of
+/// task_info(TASK_VM_INFO).compressed across the app's processes.
+/// This is NOT an estimate — no proportional attribution is performed.
 public struct CompressedMemoryEntry: Sendable, Equatable, Codable {
     public let appName: String
     public let bundleID: String?
