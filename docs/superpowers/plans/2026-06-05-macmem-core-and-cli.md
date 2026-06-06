@@ -1424,11 +1424,18 @@ final class ResponsiblePIDTests: XCTestCase {
         XCTAssertNil(ResponsiblePID.lookup(for: ProcessInfo.processInfo.processIdentifier, enabled: false))
     }
 
-    func testEnabledReturnsSelfForOwnProcess() {
+    func testEnabledReturnsValidResponsiblePID() {
         let me = ProcessInfo.processInfo.processIdentifier
-        let r = ResponsiblePID.lookup(for: me, enabled: true)
-        // The responsible pid for our own (non-helper) process is itself.
-        XCTAssertEqual(r, me)
+        // The private symbol must resolve and return a real, positive pid.
+        guard let r = ResponsiblePID.lookup(for: me, enabled: true) else {
+            return XCTFail("responsible-pid private symbol returned no pid")
+        }
+        XCTAssertGreaterThan(r, 0)
+        // Responsibility is a fixed point: the process responsible for `me` is
+        // its own responsible process. This holds whether `me` is top-level or a
+        // helper/subprocess (as XCTest itself is), avoiding the brittle
+        // "responsible pid == self" assumption that fails in the test harness.
+        XCTAssertEqual(ResponsiblePID.lookup(for: r, enabled: true), r)
     }
 }
 ```
