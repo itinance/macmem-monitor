@@ -19,12 +19,14 @@ cp .build/release/macmem /usr/local/bin/
 ## Usage
 
 ```bash
-macmem                 # full snapshot
-macmem --json          # machine-readable
-macmem --top 5         # 5 per section
-macmem --no-tabs       # skip browser tabs
-macmem --watch 2       # refresh every 2s
-sudo macmem            # include root-owned processes
+macmem                       # full snapshot
+macmem --json                # machine-readable
+macmem --top 5               # 5 per section
+macmem --no-tabs             # skip browser tabs
+macmem --no-swap             # skip the swap section
+macmem --watch 2             # refresh every 2s
+macmem --responsible-pid     # use private API for better process→app grouping (off by default; may carry notarization considerations)
+sudo macmem                  # include root-owned processes
 ```
 
 The first run prompts for **Automation** access per browser (needed to read tab URLs).
