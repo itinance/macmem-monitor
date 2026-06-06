@@ -38,8 +38,7 @@ public struct SnapshotBuilder {
             do {
                 let info = try provider.readSwap()
                 swap = info
-                let groups = AppGrouper().group(samples.filter { $0.isReadable }, topN: topN)
-                culprits = SwapEstimator().culprits(groups: groups, samples: samples, swap: info, topN: topN)
+                culprits = SwapEstimator().culprits(groups: topApps, samples: samples, swap: info, topN: topN)
             } catch {
                 swapStatus = .error
             }

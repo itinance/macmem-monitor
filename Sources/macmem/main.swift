@@ -66,18 +66,20 @@ struct Macmem: ParsableCommand {
         let snapshot = SnapshotBuilder(provider: provider, tabSource: tabSource)
             .build(topN: top, includeTabs: !noTabs, includeSwap: !noSwap)
 
+        var renderExitCode: Int32 = 0
         if json {
             do {
                 print(try JSONRenderer.render(snapshot))
             } catch {
                 FileHandle.standardError.write(Data("Error encoding JSON: \(error)\n".utf8))
+                renderExitCode = 1
             }
         } else {
-            print(TextRenderer.render(snapshot))
+            print(TextRenderer.render(snapshot, includeSwap: !noSwap, includeTabs: !noTabs))
         }
 
         printPrivilegeHintIfNeeded(snapshot)
-        return snapshotExitCode(snapshot)
+        return max(snapshotExitCode(snapshot), renderExitCode)
     }
 
     private func printPrivilegeHintIfNeeded(_ snapshot: MemorySnapshot) {

@@ -9,6 +9,7 @@ public struct SwapEstimator {
     public func culprits(groups: [AppGroup], samples: [ProcessSample],
                          swap: SwapInfo, topN: Int = 10) -> [SwapCulprit] {
         guard swap.usedBytes > 0 else { return [] }
+        let limit = max(0, topN)
 
         let pageInsByPID = Dictionary(samples.map { ($0.pid, $0.pageIns) },
                                       uniquingKeysWith: { a, _ in a })
@@ -20,7 +21,7 @@ public struct SwapEstimator {
 
         return scored
             .sorted { $0.score > $1.score }
-            .prefix(topN)
+            .prefix(limit)
             .map { entry in
                 let share = grandTotal > 0 ? entry.score / grandTotal : 0
                 let confidence: Confidence = share > 0.5 ? .high : (share > 0.2 ? .medium : .low)

@@ -26,7 +26,7 @@ public enum TextRenderer {
         return String(repeating: " ", count: width - s.count) + s
     }
 
-    public static func render(_ snap: MemorySnapshot) -> String {
+    public static func render(_ snap: MemorySnapshot, includeSwap: Bool = true, includeTabs: Bool = true) -> String {
         var lines: [String] = []
 
         lines.append("== TOP APPS (by combined memory) ==")
@@ -37,39 +37,43 @@ public enum TextRenderer {
             lines.append(String(format: "%2d. %@  %@  (%d proc)", i + 1, name, mem, app.processCount))
         }
 
-        lines.append("")
-        lines.append("== SWAP ==")
-        if let swap = snap.swap {
-            lines.append("Used \(ByteFormat.string(swap.usedBytes)) / \(ByteFormat.string(swap.totalBytes))"
-                         + "   (in: \(swap.swapIns), out: \(swap.swapOuts))")
-            if snap.swapCulprits.isEmpty {
-                lines.append("No swap in use, or no estimable culprits.")
-            } else {
-                lines.append("Likely contributors (estimated swap, not measured):")
-                for c in snap.swapCulprits {
-                    lines.append("   ~\(ByteFormat.string(c.estimatedSwapBytes))  \(c.appName)  [\(c.confidence.rawValue)]")
+        if includeSwap {
+            lines.append("")
+            lines.append("== SWAP ==")
+            if let swap = snap.swap {
+                lines.append("Used \(ByteFormat.string(swap.usedBytes)) / \(ByteFormat.string(swap.totalBytes))"
+                             + "   (in: \(swap.swapIns), out: \(swap.swapOuts))")
+                if snap.swapCulprits.isEmpty {
+                    lines.append("No swap in use, or no estimable culprits.")
+                } else {
+                    lines.append("Likely contributors (estimated swap, not measured):")
+                    for c in snap.swapCulprits {
+                        lines.append("   ~\(ByteFormat.string(c.estimatedSwapBytes))  \(c.appName)  [\(c.confidence.rawValue)]")
+                    }
                 }
+            } else {
+                lines.append(statusNote(snap.swapStatus, unreadable: 0))
             }
-        } else {
-            lines.append(statusNote(snap.swapStatus, unreadable: 0))
         }
 
-        lines.append("")
-        lines.append("== BROWSER TABS (heaviest) ==")
-        // Always show the status note for non-ok states, even when some tabs were returned
-        // (e.g. partial: browser A succeeded, browser B failed — show what we got plus the note).
-        if snap.tabsStatus != .ok {
-            lines.append(tabsStatusNote(snap.tabsStatus))
-        }
-        for (i, tab) in snap.topTabs.enumerated() {
-            if let bytes = tab.estimatedBytes {
-                // Carry the confidence label on estimated rows (spec: every estimate has a marker)
-                let mem = memColumn("~\(ByteFormat.string(bytes)) [\(tab.confidence.rawValue)]",
-                                    width: tabMemWidth)
-                lines.append(String(format: "%2d. %@  %@", i + 1, mem, tab.url))
-            } else {
-                let mem = memColumn("(n/a)", width: tabMemWidth)
-                lines.append(String(format: "%2d. %@  %@", i + 1, mem, tab.url))
+        if includeTabs {
+            lines.append("")
+            lines.append("== BROWSER TABS (heaviest) ==")
+            // Always show the status note for non-ok states, even when some tabs were returned
+            // (e.g. partial: browser A succeeded, browser B failed — show what we got plus the note).
+            if snap.tabsStatus != .ok {
+                lines.append(tabsStatusNote(snap.tabsStatus))
+            }
+            for (i, tab) in snap.topTabs.enumerated() {
+                if let bytes = tab.estimatedBytes {
+                    // Carry the confidence label on estimated rows (spec: every estimate has a marker)
+                    let mem = memColumn("~\(ByteFormat.string(bytes)) [\(tab.confidence.rawValue)]",
+                                        width: tabMemWidth)
+                    lines.append(String(format: "%2d. %@  %@", i + 1, mem, tab.url))
+                } else {
+                    let mem = memColumn("(n/a)", width: tabMemWidth)
+                    lines.append(String(format: "%2d. %@  %@", i + 1, mem, tab.url))
+                }
             }
         }
 
