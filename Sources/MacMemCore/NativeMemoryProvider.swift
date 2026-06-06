@@ -48,10 +48,15 @@ public struct NativeMemoryProvider: MemoryProvider {
 
     private static func rusage(for pid: pid_t) -> (footprint: UInt64, resident: UInt64, pageIns: UInt64)? {
         var info = rusage_info_v2()
-        let rc = withUnsafeMutablePointer(to: &info) { ptr -> Int32 in
-            ptr.withMemoryRebound(to: rusage_info_t?.self, capacity: 1) { reboundPtr in
-                proc_pid_rusage(pid, RUSAGE_INFO_V2, reboundPtr)
-            }
+        let rc = withUnsafeMutablePointer(to: &info) { infoPtr -> Int32 in
+            // proc_pid_rusage writes the rusage_info_v2 struct directly at `infoPtr`
+            // (the C API is effectively `void *` even though the Swift import types it as
+            // `UnsafeMutablePointer<rusage_info_t?>`).  Route through OpaquePointer to
+            // reinterpret the pointer type without withMemoryRebound — the original
+            // withMemoryRebound(capacity:1) incorrectly claimed that only 8 bytes
+            // (one rusage_info_t?) were accessible at that address, which is UB under
+            // Swift's memory model because the kernel writes the full 216-byte struct.
+            proc_pid_rusage(pid, RUSAGE_INFO_V2, UnsafeMutablePointer<rusage_info_t?>(OpaquePointer(infoPtr)))
         }
         guard rc == 0 else { return nil }
         return (info.ri_phys_footprint, info.ri_resident_size, info.ri_pageins)
