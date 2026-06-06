@@ -29,16 +29,20 @@ struct Macmem: ParsableCommand {
 
     func run() throws {
         if let interval = watch {
+            // In watch mode never exit on a single failed iteration — keep looping.
             while true {
                 printOnce(clear: true)
                 Thread.sleep(forTimeInterval: max(0.5, interval))
             }
         } else {
-            printOnce(clear: false)
+            let code = printOnce(clear: false)
+            if code != 0 { Darwin.exit(code) }
         }
     }
 
-    private func printOnce(clear: Bool) {
+    /// Renders and prints one snapshot. Returns the appropriate exit code.
+    @discardableResult
+    private func printOnce(clear: Bool) -> Int32 {
         if clear { print("\u{001B}[2J\u{001B}[H", terminator: "") }
 
         let provider = NativeMemoryProvider(useResponsiblePID: responsiblePid)
@@ -53,6 +57,7 @@ struct Macmem: ParsableCommand {
         }
 
         printPrivilegeHintIfNeeded(snapshot)
+        return snapshotExitCode(snapshot)
     }
 
     private func printPrivilegeHintIfNeeded(_ snapshot: MemorySnapshot) {

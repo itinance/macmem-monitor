@@ -1,6 +1,41 @@
 import XCTest
 @testable import MacMemCore
 
+final class ExitCodeTests: XCTestCase {
+    private func snap(apps: SectionStatus, swap: SectionStatus) -> MemorySnapshot {
+        MemorySnapshot(topApps: [], appsStatus: apps, unreadableProcessCount: 0,
+                       swap: nil, swapCulprits: [], swapStatus: swap,
+                       topTabs: [], tabsStatus: .ok)
+    }
+
+    func testBothErrorSectionsExitsNonZero() {
+        XCTAssertEqual(snapshotExitCode(snap(apps: .error, swap: .error)), 1)
+    }
+
+    func testOnlyAppsErrorExitsZero() {
+        XCTAssertEqual(snapshotExitCode(snap(apps: .error, swap: .ok)), 0)
+    }
+
+    func testOnlySwapErrorExitsZero() {
+        XCTAssertEqual(snapshotExitCode(snap(apps: .ok, swap: .error)), 0)
+    }
+
+    func testPartialExitsZero() {
+        XCTAssertEqual(snapshotExitCode(snap(apps: .partial, swap: .partial)), 0)
+    }
+
+    func testAllOkExitsZero() {
+        XCTAssertEqual(snapshotExitCode(snap(apps: .ok, swap: .ok)), 0)
+    }
+
+    func testTabsErrorAloneDoesNotAffectExitCode() {
+        let s = MemorySnapshot(topApps: [], appsStatus: .ok, unreadableProcessCount: 0,
+                               swap: nil, swapCulprits: [], swapStatus: .ok,
+                               topTabs: [], tabsStatus: .error)
+        XCTAssertEqual(snapshotExitCode(s), 0)
+    }
+}
+
 final class ModelsTests: XCTestCase {
     func testSnapshotIsCodableRoundTrip() throws {
         let snap = MemorySnapshot(
