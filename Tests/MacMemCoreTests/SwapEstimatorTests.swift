@@ -27,6 +27,11 @@ final class SwapEstimatorTests: XCTestCase {
         XCTAssertEqual(result[0].score, 800)
         XCTAssertEqual(result[0].confidence, .high)   // 800/1000 = 0.8 > 0.5
         XCTAssertEqual(result[1].confidence, .low)    // 200/1000 = 0.2, not > 0.2
+        // Estimated swap = proportional share of usedBytes (80) by page-in share.
+        XCTAssertEqual(result[0].estimatedSwapBytes, 64)  // 0.8 * 80
+        XCTAssertEqual(result[1].estimatedSwapBytes, 16)  // 0.2 * 80
+        // Attributions sum to (approximately) the used-swap total.
+        XCTAssertEqual(result.reduce(0) { $0 + $1.estimatedSwapBytes }, swap.usedBytes)
     }
 
     func testGroupsWithZeroPageInsAreExcluded() {

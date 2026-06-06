@@ -10,7 +10,7 @@ final class RendererTests: XCTestCase {
             swap: SwapInfo(totalBytes: 2_147_483_648, usedBytes: 1_073_741_824,
                            freeBytes: 1_073_741_824, swapIns: 10, swapOuts: 4),
             swapCulprits: [SwapCulprit(appName: "Brave Browser", bundleID: "com.brave.Browser",
-                                       score: 100, confidence: .medium)],
+                                       score: 100, estimatedSwapBytes: 536_870_912, confidence: .medium)],
             swapStatus: .ok,
             topTabs: [BrowserTab(browser: "Brave Browser", title: "Example",
                                  url: "https://example.com", estimatedBytes: 1_048_576, confidence: .low)],
@@ -28,6 +28,8 @@ final class RendererTests: XCTestCase {
         XCTAssertTrue(out.contains("https://example.com"))
         XCTAssertTrue(out.contains("~"))               // estimate marker
         XCTAssertTrue(out.contains("medium"))          // culprit confidence
+        XCTAssertTrue(out.contains("512.0 MB"),        // estimated swap bytes per culprit
+                      "swap contributors should show an estimated GB/MB figure")
         // FINDING 4: confidence label must appear on estimated tab rows
         XCTAssertTrue(out.contains("[low]"),
                       "estimated tab rows should carry a [low] confidence label")

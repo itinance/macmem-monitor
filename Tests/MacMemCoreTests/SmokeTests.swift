@@ -45,7 +45,7 @@ final class ModelsTests: XCTestCase {
             unreadableProcessCount: 0,
             swap: SwapInfo(totalBytes: 100, usedBytes: 40, freeBytes: 60, swapIns: 5, swapOuts: 2),
             swapCulprits: [SwapCulprit(appName: "Brave", bundleID: "com.brave.Browser",
-                                       score: 9.0, confidence: .medium)],
+                                       score: 9.0, estimatedSwapBytes: 40, confidence: .medium)],
             swapStatus: .ok,
             topTabs: [BrowserTab(browser: "Brave", title: "Example", url: "https://example.com",
                                  estimatedBytes: nil, confidence: .low)],

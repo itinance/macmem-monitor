@@ -24,8 +24,12 @@ public struct SwapEstimator {
             .map { entry in
                 let share = grandTotal > 0 ? entry.score / grandTotal : 0
                 let confidence: Confidence = share > 0.5 ? .high : (share > 0.2 ? .medium : .low)
+                // Estimated swap attribution: proportional share of *used* swap by the
+                // page-in proxy. Heuristic — never measured per-process swap.
+                let estimatedSwapBytes = UInt64((share * Double(swap.usedBytes)).rounded())
                 return SwapCulprit(appName: entry.group.name, bundleID: entry.group.bundleID,
-                                   score: entry.score, confidence: confidence)
+                                   score: entry.score, estimatedSwapBytes: estimatedSwapBytes,
+                                   confidence: confidence)
             }
     }
 }
