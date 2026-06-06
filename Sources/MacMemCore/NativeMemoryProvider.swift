@@ -14,18 +14,18 @@ public struct NativeMemoryProvider: MemoryProvider {
         return pids.compactMap { pid -> ProcessSample? in
             guard pid > 0 else { return nil }
             let path = Self.path(for: pid)
-            let bsd = Self.bsdInfo(for: pid)
+            let parentPID = Self.ppid(for: pid)
             let name = appIdentity[pid]?.name ?? Self.name(for: pid, fallbackPath: path)
             let bundleID = appIdentity[pid]?.bundleID ?? Self.bundleID(forPath: path)
 
             if let usage = Self.rusage(for: pid) {
-                return ProcessSample(pid: pid, ppid: bsd.ppid, responsiblePID: nil,
+                return ProcessSample(pid: pid, ppid: parentPID, responsiblePID: nil,
                                      bundleID: bundleID, name: name, executablePath: path,
                                      footprintBytes: usage.footprint, residentBytes: usage.resident,
                                      pageIns: usage.pageIns, isReadable: true)
             } else {
                 // Not owned by us / not permitted: still list it, marked unreadable.
-                return ProcessSample(pid: pid, ppid: bsd.ppid, responsiblePID: nil,
+                return ProcessSample(pid: pid, ppid: parentPID, responsiblePID: nil,
                                      bundleID: bundleID, name: name, executablePath: path,
                                      footprintBytes: 0, residentBytes: 0, pageIns: 0, isReadable: false)
             }
@@ -54,12 +54,12 @@ public struct NativeMemoryProvider: MemoryProvider {
         return (info.ri_phys_footprint, info.ri_resident_size, info.ri_pageins)
     }
 
-    private static func bsdInfo(for pid: pid_t) -> (ppid: Int32, isApp: Bool) {
+    private static func ppid(for pid: pid_t) -> Int32 {
         var info = proc_bsdinfo()
         let size = Int32(MemoryLayout<proc_bsdinfo>.size)
         let rc = proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, size)
-        guard rc == size else { return (0, false) }
-        return (Int32(info.pbi_ppid), false)
+        guard rc == size else { return 0 }
+        return Int32(info.pbi_ppid)
     }
 
     // PROC_PIDPATHINFO_MAXSIZE is defined as 4*MAXPATHLEN in proc_info.h but the
@@ -95,7 +95,18 @@ public struct NativeMemoryProvider: MemoryProvider {
     }
 
     /// Map of pid → (bundleID, localizedName) for GUI applications via NSWorkspace.
+    /// NSWorkspace is main-thread-affined, so hop to main when called off-main.
+    /// Interim approach — migrate to @MainActor isolation once the protocol and
+    /// callers support async/actor contexts.
     private static func appIdentityByPID() -> [pid_t: (bundleID: String?, name: String)] {
+        if Thread.isMainThread {
+            return collectAppIdentity()
+        } else {
+            return DispatchQueue.main.sync { collectAppIdentity() }
+        }
+    }
+
+    private static func collectAppIdentity() -> [pid_t: (bundleID: String?, name: String)] {
         var map: [pid_t: (String?, String)] = [:]
         for app in NSWorkspace.shared.runningApplications {
             let pid = app.processIdentifier
