@@ -18,7 +18,7 @@ public struct BrowserInspector {
     ///     still returning the tabs that did succeed.
     public func topTabs(rendererFootprintsByBrowser: [String: [UInt64]] = [:],
                         topN: Int = 10,
-                        hadErrors: inout Bool) throws -> [BrowserTab] {
+                        hadErrors: inout Bool) -> [BrowserTab] {
         var all: [BrowserTab] = []
 
         for browser in source.runningBrowsers() {

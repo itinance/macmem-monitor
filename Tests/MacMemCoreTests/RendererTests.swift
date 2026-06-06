@@ -73,6 +73,21 @@ final class RendererTests: XCTestCase {
                       "apps partial message should include the unreadable count")
     }
 
+    // NIT 2: partial status with non-empty tabs — both tab rows AND the status note must appear
+    func testTabsPartialWithTabsShowsBothTabRowAndNote() {
+        let snap = MemorySnapshot(
+            topApps: [], appsStatus: .ok, unreadableProcessCount: 0,
+            swap: nil, swapCulprits: [], swapStatus: .ok,
+            topTabs: [BrowserTab(browser: "Brave Browser", title: "Loaded Page",
+                                 url: "https://loaded.com", estimatedBytes: nil, confidence: .low)],
+            tabsStatus: .partial)
+        let out = TextRenderer.render(snap)
+        XCTAssertTrue(out.contains("https://loaded.com"),
+                      "tab rows should still render when tabsStatus is .partial")
+        XCTAssertTrue(out.contains("some browsers could not be read"),
+                      "partial note must appear even when some tabs were returned")
+    }
+
     func testJSONRendererIsValidAndRoundTrips() throws {
         let json = try JSONRenderer.render(fixture())
         let decoded = try JSONDecoder().decode(MemorySnapshot.self, from: Data(json.utf8))

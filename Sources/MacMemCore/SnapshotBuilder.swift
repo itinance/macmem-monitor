@@ -52,17 +52,13 @@ public struct SnapshotBuilder {
         var tabsStatus: SectionStatus = .ok
         if includeTabs {
             if let tabSource {
-                do {
-                    let footprints = rendererFootprints(from: samples, topApps: topApps)
-                    var hadBrowserErrors = false
-                    topTabs = try BrowserInspector(source: tabSource)
-                        .topTabs(rendererFootprintsByBrowser: footprints, topN: topN,
-                                 hadErrors: &hadBrowserErrors)
-                    // .ok only when every browser succeeded; .partial when some failed.
-                    tabsStatus = hadBrowserErrors ? .partial : .ok
-                } catch {
-                    tabsStatus = .partial
-                }
+                let footprints = rendererFootprints(from: samples, topApps: topApps)
+                var hadBrowserErrors = false
+                topTabs = BrowserInspector(source: tabSource)
+                    .topTabs(rendererFootprintsByBrowser: footprints, topN: topN,
+                             hadErrors: &hadBrowserErrors)
+                // .ok only when every browser succeeded; .partial when some failed.
+                tabsStatus = hadBrowserErrors ? .partial : .ok
             } else {
                 tabsStatus = .permissionNeeded
             }
