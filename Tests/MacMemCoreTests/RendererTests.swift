@@ -28,6 +28,49 @@ final class RendererTests: XCTestCase {
         XCTAssertTrue(out.contains("https://example.com"))
         XCTAssertTrue(out.contains("~"))               // estimate marker
         XCTAssertTrue(out.contains("medium"))          // culprit confidence
+        // FINDING 4: confidence label must appear on estimated tab rows
+        XCTAssertTrue(out.contains("[low]"),
+                      "estimated tab rows should carry a [low] confidence label")
+    }
+
+    // FINDING 4: tab rows with no estimate must NOT carry a confidence label
+    func testTabRowWithNoEstimateHasNoConfidenceLabel() {
+        let snap = MemorySnapshot(
+            topApps: [], appsStatus: .ok, unreadableProcessCount: 0,
+            swap: nil, swapCulprits: [], swapStatus: .ok,
+            topTabs: [BrowserTab(browser: "Brave Browser", title: "No Estimate",
+                                 url: "https://noest.com", estimatedBytes: nil, confidence: .low)],
+            tabsStatus: .ok)
+        let out = TextRenderer.render(snap)
+        XCTAssertFalse(out.contains("[low]"),
+                       "tab rows without an estimate should not carry a confidence label")
+    }
+
+    // FINDING 7: partial message for tabs section must not mention "sudo" or unreadable counts
+    func testTabsPartialMessageIsContextAppropriate() {
+        let snap = MemorySnapshot(
+            topApps: [], appsStatus: .ok, unreadableProcessCount: 0,
+            swap: nil, swapCulprits: [], swapStatus: .ok,
+            topTabs: [], tabsStatus: .partial)
+        let out = TextRenderer.render(snap)
+        XCTAssertTrue(out.contains("partial"), "tabs partial status should say 'partial'")
+        XCTAssertFalse(out.lowercased().contains("sudo"),
+                       "tabs partial message should not mention sudo")
+        XCTAssertFalse(out.contains("not readable"),
+                       "tabs partial message should not mention unreadable process counts")
+    }
+
+    // FINDING 7: partial message for apps section SHOULD mention sudo / unreadable count
+    func testAppsPartialMessageMentionsSudo() {
+        let snap = MemorySnapshot(
+            topApps: [], appsStatus: .partial, unreadableProcessCount: 3,
+            swap: nil, swapCulprits: [], swapStatus: .ok,
+            topTabs: [], tabsStatus: .ok)
+        let out = TextRenderer.render(snap)
+        XCTAssertTrue(out.lowercased().contains("sudo"),
+                      "apps partial message should mention sudo")
+        XCTAssertTrue(out.contains("3"),
+                      "apps partial message should include the unreadable count")
     }
 
     func testJSONRendererIsValidAndRoundTrips() throws {
