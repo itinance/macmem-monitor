@@ -9,7 +9,7 @@ public struct SnapshotBuilder {
     let knownBrowsers: Set<String>
 
     public init(provider: MemoryProvider, tabSource: TabSource?,
-                knownBrowsers: Set<String> = ["Brave Browser", "Google Chrome", "Microsoft Edge", "Safari"]) {
+                knownBrowsers: Set<String> = Set(SupportedBrowsers.all)) {
         self.provider = provider
         self.tabSource = tabSource
         self.knownBrowsers = knownBrowsers

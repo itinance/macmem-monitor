@@ -27,6 +27,15 @@ struct Macmem: ParsableCommand {
     @Flag(name: .long, help: "Use the private responsible-PID API for better grouping (off by default).")
     var responsiblePid = false
 
+    @Option(name: .long, help: "Only read tabs from this browser (Brave Browser, Google Chrome, Microsoft Edge, or Safari).")
+    var browser: String?
+
+    func validate() throws {
+        if let b = browser, SupportedBrowsers.canonical(b) == nil {
+            throw ValidationError("Unsupported browser '\(b)'. Supported: \(SupportedBrowsers.all.joined(separator: ", ")).")
+        }
+    }
+
     func run() throws {
         if let interval = watch {
             // In watch mode never exit on a single failed iteration — keep looping.
@@ -46,7 +55,14 @@ struct Macmem: ParsableCommand {
         if clear { print("\u{001B}[2J\u{001B}[H", terminator: "") }
 
         let provider = NativeMemoryProvider(useResponsiblePID: responsiblePid)
-        let tabSource: TabSource? = noTabs ? nil : AppleScriptTabSource()
+        let tabSource: TabSource?
+        if noTabs {
+            tabSource = nil
+        } else if let b = browser, let canonical = SupportedBrowsers.canonical(b) {
+            tabSource = AppleScriptTabSource(candidates: [canonical])
+        } else {
+            tabSource = AppleScriptTabSource()
+        }
         let snapshot = SnapshotBuilder(provider: provider, tabSource: tabSource)
             .build(topN: top, includeTabs: !noTabs, includeSwap: !noSwap)
 
