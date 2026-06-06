@@ -43,12 +43,17 @@ public enum TextRenderer {
             if let swap = snap.swap {
                 lines.append("Used \(ByteFormat.string(swap.usedBytes)) / \(ByteFormat.string(swap.totalBytes))"
                              + "   (in: \(swap.swapIns), out: \(swap.swapOuts))")
-                if snap.swapCulprits.isEmpty {
-                    lines.append("No swap in use, or no estimable culprits.")
+                lines.append("")
+                if snap.compressedUsers.isEmpty {
+                    lines.append("Compressed memory per app: none measured"
+                                 + (snap.compressedUnreadableCount > 0 ? " (run with sudo to measure more)." : "."))
                 } else {
-                    lines.append("Likely contributors (estimated swap, not measured):")
-                    for c in snap.swapCulprits {
-                        lines.append("   ~\(ByteFormat.string(c.estimatedSwapBytes))  \(c.appName)  [\(c.confidence.rawValue)]")
+                    lines.append("Compressed memory per app (measured — RAM held by the compressor, swap precursor):")
+                    for c in snap.compressedUsers {
+                        lines.append("   \(ByteFormat.string(c.compressedBytes))  \(c.appName)  [measured]")
+                    }
+                    if snap.compressedUnreadableCount > 0 {
+                        lines.append("   (\(snap.compressedUnreadableCount) processes could not be measured; run with sudo for fuller coverage)")
                     }
                 }
             } else {

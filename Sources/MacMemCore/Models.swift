@@ -18,15 +18,20 @@ public struct ProcessSample: Sendable, Equatable, Codable {
     public let footprintBytes: UInt64
     public let residentBytes: UInt64
     public let pageIns: UInt64
+    /// Per-process compressed-memory footprint in bytes, measured via
+    /// task_info(TASK_VM_INFO).compressed. nil when task_for_pid was denied
+    /// (other-user / hardened processes without sudo). This is the swap precursor.
+    public let compressedBytes: UInt64?
     public let isReadable: Bool
 
     public init(pid: Int32, ppid: Int32, responsiblePID: Int32?, bundleID: String?,
                 name: String, executablePath: String?, footprintBytes: UInt64,
-                residentBytes: UInt64, pageIns: UInt64, isReadable: Bool) {
+                residentBytes: UInt64, pageIns: UInt64, compressedBytes: UInt64? = nil,
+                isReadable: Bool) {
         self.pid = pid; self.ppid = ppid; self.responsiblePID = responsiblePID
         self.bundleID = bundleID; self.name = name; self.executablePath = executablePath
         self.footprintBytes = footprintBytes; self.residentBytes = residentBytes
-        self.pageIns = pageIns; self.isReadable = isReadable
+        self.pageIns = pageIns; self.compressedBytes = compressedBytes; self.isReadable = isReadable
     }
 }
 
@@ -59,22 +64,17 @@ public struct SwapInfo: Sendable, Equatable, Codable {
     }
 }
 
-public struct SwapCulprit: Sendable, Equatable, Codable {
+/// A measured per-app compressed-memory total. Unlike the old SwapCulprit this is
+/// NOT an estimate — it is the sum of task_info(TASK_VM_INFO).compressed across the
+/// app's readable processes.
+public struct CompressedMemoryEntry: Sendable, Equatable, Codable {
     public let appName: String
     public let bundleID: String?
-    public let score: Double
-    /// Heuristic, NOT measured. macOS does not expose per-process swap; this is the
-    /// app's proportional share of *used* swap, weighted by its page-in proxy
-    /// (`score`). Always presented as an estimate (`~` + confidence) — do not treat
-    /// as ground truth.
-    public let estimatedSwapBytes: UInt64
-    public let confidence: Confidence
+    public let compressedBytes: UInt64
 
-    public init(appName: String, bundleID: String?, score: Double,
-                estimatedSwapBytes: UInt64, confidence: Confidence) {
+    public init(appName: String, bundleID: String?, compressedBytes: UInt64) {
         self.appName = appName; self.bundleID = bundleID
-        self.score = score; self.estimatedSwapBytes = estimatedSwapBytes
-        self.confidence = confidence
+        self.compressedBytes = compressedBytes
     }
 }
 
@@ -97,17 +97,21 @@ public struct MemorySnapshot: Sendable, Equatable, Codable {
     public let appsStatus: SectionStatus
     public let unreadableProcessCount: Int
     public let swap: SwapInfo?
-    public let swapCulprits: [SwapCulprit]
+    public let compressedUsers: [CompressedMemoryEntry]
+    public let compressedUnreadableCount: Int
     public let swapStatus: SectionStatus
     public let topTabs: [BrowserTab]
     public let tabsStatus: SectionStatus
 
     public init(topApps: [AppGroup], appsStatus: SectionStatus, unreadableProcessCount: Int,
-                swap: SwapInfo?, swapCulprits: [SwapCulprit], swapStatus: SectionStatus,
+                swap: SwapInfo?, compressedUsers: [CompressedMemoryEntry],
+                compressedUnreadableCount: Int = 0, swapStatus: SectionStatus,
                 topTabs: [BrowserTab], tabsStatus: SectionStatus) {
         self.topApps = topApps; self.appsStatus = appsStatus
         self.unreadableProcessCount = unreadableProcessCount
-        self.swap = swap; self.swapCulprits = swapCulprits; self.swapStatus = swapStatus
+        self.swap = swap; self.compressedUsers = compressedUsers
+        self.compressedUnreadableCount = compressedUnreadableCount
+        self.swapStatus = swapStatus
         self.topTabs = topTabs; self.tabsStatus = tabsStatus
     }
 }
