@@ -9,8 +9,9 @@ final class RendererTests: XCTestCase {
             appsStatus: .ok, unreadableProcessCount: 0,
             swap: SwapInfo(totalBytes: 2_147_483_648, usedBytes: 1_073_741_824,
                            freeBytes: 1_073_741_824, swapIns: 10, swapOuts: 4),
-            swapCulprits: [SwapCulprit(appName: "Brave Browser", bundleID: "com.brave.Browser",
-                                       score: 100, estimatedSwapBytes: 536_870_912, confidence: .medium)],
+            compressedUsers: [CompressedMemoryEntry(appName: "Brave Browser", bundleID: "com.brave.Browser",
+                                                    compressedBytes: 536_870_912)],
+            compressedUnreadableCount: 3,
             swapStatus: .ok,
             topTabs: [BrowserTab(browser: "Brave Browser", title: "Example",
                                  url: "https://example.com", estimatedBytes: 1_048_576, confidence: .low)],
@@ -26,10 +27,18 @@ final class RendererTests: XCTestCase {
         XCTAssertTrue(out.contains("1.0 GB"))
         XCTAssertTrue(out.contains("BROWSER TABS"))
         XCTAssertTrue(out.contains("https://example.com"))
-        XCTAssertTrue(out.contains("~"))               // estimate marker
-        XCTAssertTrue(out.contains("medium"))          // culprit confidence
-        XCTAssertTrue(out.contains("512.0 MB"),        // estimated swap bytes per culprit
-                      "swap contributors should show an estimated GB/MB figure")
+        XCTAssertTrue(out.contains("512.0 MB"),        // measured compressed bytes per entry
+                      "swap section should show the measured compressed MB figure")
+        XCTAssertTrue(out.contains("Brave Browser"),   // app name in compressed list
+                      "compressed memory entry should show the app name")
+        XCTAssertTrue(out.contains("[measured]"),       // measured marker (NOT ~ or confidence)
+                      "compressed memory rows must carry [measured] marker")
+        XCTAssertFalse(out.contains("~512"),           // NO estimate tilde before the 512 MB figure
+                       "compressed memory rows must NOT contain ~ prefix (these are measured, not estimated)")
+        XCTAssertFalse(out.contains("medium"),         // NO old confidence label
+                       "compressed memory rows must NOT contain confidence labels like 'medium'")
+        XCTAssertTrue(out.contains("could not be measured"),
+                      "coverage footer should appear when compressedUnreadableCount > 0")
         // FINDING 4: confidence label must appear on estimated tab rows
         XCTAssertTrue(out.contains("[low]"),
                       "estimated tab rows should carry a [low] confidence label")
@@ -39,7 +48,7 @@ final class RendererTests: XCTestCase {
     func testTabRowWithNoEstimateHasNoConfidenceLabel() {
         let snap = MemorySnapshot(
             topApps: [], appsStatus: .ok, unreadableProcessCount: 0,
-            swap: nil, swapCulprits: [], swapStatus: .ok,
+            swap: nil, compressedUsers: [], swapStatus: .ok,
             topTabs: [BrowserTab(browser: "Brave Browser", title: "No Estimate",
                                  url: "https://noest.com", estimatedBytes: nil, confidence: .low)],
             tabsStatus: .ok)
@@ -52,7 +61,7 @@ final class RendererTests: XCTestCase {
     func testTabsPartialMessageIsContextAppropriate() {
         let snap = MemorySnapshot(
             topApps: [], appsStatus: .ok, unreadableProcessCount: 0,
-            swap: nil, swapCulprits: [], swapStatus: .ok,
+            swap: nil, compressedUsers: [], swapStatus: .ok,
             topTabs: [], tabsStatus: .partial)
         let out = TextRenderer.render(snap)
         XCTAssertTrue(out.contains("partial"), "tabs partial status should say 'partial'")
@@ -66,7 +75,7 @@ final class RendererTests: XCTestCase {
     func testAppsPartialMessageMentionsSudo() {
         let snap = MemorySnapshot(
             topApps: [], appsStatus: .partial, unreadableProcessCount: 3,
-            swap: nil, swapCulprits: [], swapStatus: .ok,
+            swap: nil, compressedUsers: [], swapStatus: .ok,
             topTabs: [], tabsStatus: .ok)
         let out = TextRenderer.render(snap)
         XCTAssertTrue(out.lowercased().contains("sudo"),
@@ -79,7 +88,7 @@ final class RendererTests: XCTestCase {
     func testTabsPartialWithTabsShowsBothTabRowAndNote() {
         let snap = MemorySnapshot(
             topApps: [], appsStatus: .ok, unreadableProcessCount: 0,
-            swap: nil, swapCulprits: [], swapStatus: .ok,
+            swap: nil, compressedUsers: [], swapStatus: .ok,
             topTabs: [BrowserTab(browser: "Brave Browser", title: "Loaded Page",
                                  url: "https://loaded.com", estimatedBytes: nil, confidence: .low)],
             tabsStatus: .partial)
@@ -103,7 +112,7 @@ final class RendererTests: XCTestCase {
                          totalFootprintBytes: 987_654_321, processCount: 2, pids: [2, 3])
             ],
             appsStatus: .ok, unreadableProcessCount: 0,
-            swap: nil, swapCulprits: [], swapStatus: .ok,
+            swap: nil, compressedUsers: [], swapStatus: .ok,
             topTabs: [], tabsStatus: .ok)
         let out = TextRenderer.render(snap)
         let lines = out.split(separator: "\n", omittingEmptySubsequences: false)

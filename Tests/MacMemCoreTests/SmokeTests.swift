@@ -4,7 +4,7 @@ import XCTest
 final class ExitCodeTests: XCTestCase {
     private func snap(apps: SectionStatus, swap: SectionStatus) -> MemorySnapshot {
         MemorySnapshot(topApps: [], appsStatus: apps, unreadableProcessCount: 0,
-                       swap: nil, swapCulprits: [], swapStatus: swap,
+                       swap: nil, compressedUsers: [], swapStatus: swap,
                        topTabs: [], tabsStatus: .ok)
     }
 
@@ -30,7 +30,7 @@ final class ExitCodeTests: XCTestCase {
 
     func testTabsErrorAloneDoesNotAffectExitCode() {
         let s = MemorySnapshot(topApps: [], appsStatus: .ok, unreadableProcessCount: 0,
-                               swap: nil, swapCulprits: [], swapStatus: .ok,
+                               swap: nil, compressedUsers: [], swapStatus: .ok,
                                topTabs: [], tabsStatus: .error)
         XCTAssertEqual(snapshotExitCode(s), 0)
     }
@@ -44,8 +44,8 @@ final class ModelsTests: XCTestCase {
             appsStatus: .ok,
             unreadableProcessCount: 0,
             swap: SwapInfo(totalBytes: 100, usedBytes: 40, freeBytes: 60, swapIns: 5, swapOuts: 2),
-            swapCulprits: [SwapCulprit(appName: "Brave", bundleID: "com.brave.Browser",
-                                       score: 9.0, estimatedSwapBytes: 40, confidence: .medium)],
+            compressedUsers: [CompressedMemoryEntry(appName: "Brave", bundleID: "com.brave.Browser",
+                                                    compressedBytes: 40)],
             swapStatus: .ok,
             topTabs: [BrowserTab(browser: "Brave", title: "Example", url: "https://example.com",
                                  estimatedBytes: nil, confidence: .low)],

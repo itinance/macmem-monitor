@@ -30,21 +30,22 @@ public struct SnapshotBuilder {
             appsStatus = .error
         }
 
-        // --- Swap section ---
+        // --- Swap totals + measured compressed memory ---
         var swap: SwapInfo?
-        var culprits: [SwapCulprit] = []
+        var compressedUsers: [CompressedMemoryEntry] = []
         var swapStatus: SectionStatus = .ok
         if includeSwap {
             do {
-                let info = try provider.readSwap()
-                swap = info
-                culprits = SwapEstimator().culprits(groups: topApps, samples: samples, swap: info, topN: topN)
+                swap = try provider.readSwap()
             } catch {
                 swapStatus = .error
             }
-        } else {
-            swapStatus = .ok
+            // Compressed memory is meaningful even when used swap is 0 (the compressor
+            // holds compressed pages in RAM before any swap-out), so compute it regardless.
+            compressedUsers = CompressedMemoryAggregator().entries(groups: topApps, samples: samples, topN: topN)
         }
+        // Processes whose compressed footprint we could not read (task_for_pid denied).
+        let compressedUnreadable = samples.filter { $0.compressedBytes == nil }.count
 
         // --- Tabs section ---
         var topTabs: [BrowserTab] = []
@@ -65,7 +66,9 @@ public struct SnapshotBuilder {
 
         return MemorySnapshot(topApps: topApps, appsStatus: appsStatus,
                               unreadableProcessCount: unreadable, swap: swap,
-                              swapCulprits: culprits, swapStatus: swapStatus,
+                              compressedUsers: compressedUsers,
+                              compressedUnreadableCount: compressedUnreadable,
+                              swapStatus: swapStatus,
                               topTabs: topTabs, tabsStatus: tabsStatus)
     }
 

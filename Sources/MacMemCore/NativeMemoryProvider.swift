@@ -20,17 +20,19 @@ public struct NativeMemoryProvider: MemoryProvider {
             let parentPID = Self.ppid(for: pid)
             let name = appIdentity[pid]?.name ?? Self.name(for: pid, fallbackPath: path)
             let bundleID = appIdentity[pid]?.bundleID ?? Self.bundleID(forPath: path)
+            // Measure compressed memory independently of rusage readability.
+            let comp = Self.compressed(for: pid)
 
             if let usage = Self.rusage(for: pid) {
                 return ProcessSample(pid: pid, ppid: parentPID, responsiblePID: ResponsiblePID.lookup(for: pid, enabled: useResponsiblePID),
                                      bundleID: bundleID, name: name, executablePath: path,
                                      footprintBytes: usage.footprint, residentBytes: usage.resident,
-                                     pageIns: usage.pageIns, isReadable: true)
+                                     pageIns: usage.pageIns, compressedBytes: comp, isReadable: true)
             } else {
                 // Not owned by us / not permitted: still list it, marked unreadable.
                 return ProcessSample(pid: pid, ppid: parentPID, responsiblePID: ResponsiblePID.lookup(for: pid, enabled: useResponsiblePID),
                                      bundleID: bundleID, name: name, executablePath: path,
-                                     footprintBytes: 0, residentBytes: 0, pageIns: 0, isReadable: false)
+                                     footprintBytes: 0, residentBytes: 0, pageIns: 0, compressedBytes: comp, isReadable: false)
             }
         }
     }
@@ -60,6 +62,23 @@ public struct NativeMemoryProvider: MemoryProvider {
         }
         guard rc == 0 else { return nil }
         return (info.ri_phys_footprint, info.ri_resident_size, info.ri_pageins)
+    }
+
+    /// Measured per-process compressed memory via task_info(TASK_VM_INFO).
+    /// Returns nil when task_for_pid is denied (other-user/hardened process without sudo).
+    private static func compressed(for pid: pid_t) -> UInt64? {
+        var task: task_t = 0
+        guard task_for_pid(mach_task_self_, pid, &task) == KERN_SUCCESS else { return nil }
+        defer { mach_port_deallocate(mach_task_self_, task) }
+        var info = task_vm_info_data_t()
+        var count = mach_msg_type_number_t(MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<natural_t>.size)
+        let rc = withUnsafeMutablePointer(to: &info) { ptr -> kern_return_t in
+            ptr.withMemoryRebound(to: integer_t.self, capacity: Int(count)) { intPtr in
+                task_info(task, task_flavor_t(TASK_VM_INFO), intPtr, &count)
+            }
+        }
+        guard rc == KERN_SUCCESS else { return nil }
+        return UInt64(info.compressed)
     }
 
     private static func ppid(for pid: pid_t) -> Int32 {

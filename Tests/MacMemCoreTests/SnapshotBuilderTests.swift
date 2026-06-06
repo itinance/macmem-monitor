@@ -5,10 +5,10 @@ private struct DummyError: Error {}
 
 final class SnapshotBuilderTests: XCTestCase {
     private func sample(_ pid: Int32, name: String, bundle: String?, footprint: UInt64,
-                        pageIns: UInt64 = 0, readable: Bool = true) -> ProcessSample {
+                        pageIns: UInt64 = 0, compressed: UInt64? = nil, readable: Bool = true) -> ProcessSample {
         ProcessSample(pid: pid, ppid: 0, responsiblePID: nil, bundleID: bundle, name: name,
                       executablePath: nil, footprintBytes: footprint, residentBytes: footprint,
-                      pageIns: pageIns, isReadable: readable)
+                      pageIns: pageIns, compressedBytes: compressed, isReadable: readable)
     }
 
     func testBuildsAllSectionsOK() {
