@@ -1,16 +1,40 @@
 import Foundation
 
 public enum TextRenderer {
+    // Column widths for fixed-width table layout.
+    // NAME_WIDTH: characters reserved for the app name (long names are truncated with "…").
+    private static let nameWidth = 30
+    // MEM_WIDTH: characters reserved for the right-aligned memory string (e.g. "  1.5 MB").
+    private static let memWidth = 10
+    // TAB_MEM_WIDTH: characters reserved for the tab memory field (includes "~" prefix and label).
+    private static let tabMemWidth = 20
+
+    /// Left-aligns `s` in a field of exactly `width` characters.
+    /// Names longer than `width - 1` are truncated and get a trailing "…".
+    private static func nameColumn(_ s: String, width: Int = nameWidth) -> String {
+        if s.count <= width {
+            return s.padding(toLength: width, withPad: " ", startingAt: 0)
+        }
+        // Truncate to (width - 1) chars and append the ellipsis character.
+        let truncated = String(s.prefix(width - 1)) + "…"
+        return truncated
+    }
+
+    /// Right-aligns `s` in a field of exactly `width` characters.
+    private static func memColumn(_ s: String, width: Int = memWidth) -> String {
+        if s.count >= width { return s }
+        return String(repeating: " ", count: width - s.count) + s
+    }
+
     public static func render(_ snap: MemorySnapshot) -> String {
         var lines: [String] = []
 
         lines.append("== TOP APPS (by combined memory) ==")
         lines.append(statusNote(snap.appsStatus, unreadable: snap.unreadableProcessCount))
         for (i, app) in snap.topApps.enumerated() {
-            lines.append(String(format: "%2d. %-28@  %10@  (%d proc)",
-                                i + 1, app.name as NSString,
-                                ByteFormat.string(app.totalFootprintBytes) as NSString,
-                                app.processCount))
+            let name = nameColumn(app.name)
+            let mem  = memColumn(ByteFormat.string(app.totalFootprintBytes))
+            lines.append(String(format: "%2d. %@  %@  (%d proc)", i + 1, name, mem, app.processCount))
         }
 
         lines.append("")
@@ -40,11 +64,12 @@ public enum TextRenderer {
         for (i, tab) in snap.topTabs.enumerated() {
             if let bytes = tab.estimatedBytes {
                 // Carry the confidence label on estimated rows (spec: every estimate has a marker)
-                let mem = "~\(ByteFormat.string(bytes)) [\(tab.confidence.rawValue)]"
-                lines.append(String(format: "%2d. %@  %@", i + 1, mem as NSString, tab.url as NSString))
+                let mem = memColumn("~\(ByteFormat.string(bytes)) [\(tab.confidence.rawValue)]",
+                                    width: tabMemWidth)
+                lines.append(String(format: "%2d. %@  %@", i + 1, mem, tab.url))
             } else {
-                lines.append(String(format: "%2d. %10@  %@", i + 1, "(n/a)" as NSString,
-                                    tab.url as NSString))
+                let mem = memColumn("(n/a)", width: tabMemWidth)
+                lines.append(String(format: "%2d. %@  %@", i + 1, mem, tab.url))
             }
         }
 
