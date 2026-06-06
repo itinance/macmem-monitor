@@ -6,7 +6,7 @@ import AppKit
 /// the tabs section `.partial`.
 public struct AppleScriptTabSource: TabSource {
     private let candidates: [String]
-    public init(candidates: [String] = ["Brave Browser", "Google Chrome", "Microsoft Edge", "Safari"]) {
+    public init(candidates: [String] = SupportedBrowsers.all) {
         self.candidates = candidates
     }
 
