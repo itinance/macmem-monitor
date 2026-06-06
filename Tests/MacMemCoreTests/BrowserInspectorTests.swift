@@ -1,13 +1,17 @@
 import XCTest
 @testable import MacMemCore
 
+private struct BrowserTestError: Error {}
+
 final class BrowserInspectorTests: XCTestCase {
     func testListsTabsWithoutEstimatesWhenNoRendererData() throws {
         let source = FakeTabSource(byBrowser: [
             "Brave": [RawTab(title: "A", url: "https://a.com", windowIndex: 0, tabIndex: 0),
                       RawTab(title: "B", url: "https://b.com", windowIndex: 0, tabIndex: 1)],
         ])
-        let tabs = try BrowserInspector(source: source).topTabs(rendererFootprintsByBrowser: [:], topN: 10)
+        var ignored = false
+        let tabs = try BrowserInspector(source: source)
+            .topTabs(rendererFootprintsByBrowser: [:], topN: 10, hadErrors: &ignored)
         XCTAssertEqual(tabs.count, 2)
         XCTAssertTrue(tabs.allSatisfy { $0.estimatedBytes == nil })
         XCTAssertTrue(tabs.allSatisfy { $0.confidence == .low })
@@ -18,11 +22,42 @@ final class BrowserInspectorTests: XCTestCase {
             "Brave": [RawTab(title: "A", url: "https://a.com", windowIndex: 0, tabIndex: 0),
                       RawTab(title: "B", url: "https://b.com", windowIndex: 0, tabIndex: 1)],
         ])
+        var ignored = false
         let tabs = try BrowserInspector(source: source)
-            .topTabs(rendererFootprintsByBrowser: ["Brave": [100, 500]], topN: 10)
+            .topTabs(rendererFootprintsByBrowser: ["Brave": [100, 500]], topN: 10, hadErrors: &ignored)
         XCTAssertEqual(tabs.count, 2)
         XCTAssertEqual(tabs[0].estimatedBytes, 500)
         XCTAssertEqual(tabs[1].estimatedBytes, 100)
+    }
+
+    func testPartialBrowserFailureReturnsSuccessfulBrowserTabsAndThrows() throws {
+        // Browser A returns 2 tabs; browser B throws.
+        // topTabs must return A's 2 tabs AND signal that something failed.
+        let source = FakeTabSource(
+            byBrowser: [
+                "BrowserA": [RawTab(title: "A1", url: "https://a1.com", windowIndex: 0, tabIndex: 0),
+                              RawTab(title: "A2", url: "https://a2.com", windowIndex: 0, tabIndex: 1)],
+                "BrowserB": [],
+            ],
+            errorsByBrowser: ["BrowserB": BrowserTestError()])
+
+        var hadPartialError = false
+        let tabs = try BrowserInspector(source: source)
+            .topTabs(rendererFootprintsByBrowser: [:], topN: 10, hadErrors: &hadPartialError)
+        XCTAssertEqual(tabs.count, 2)
+        XCTAssertTrue(tabs.allSatisfy { $0.browser == "BrowserA" })
+        XCTAssertTrue(hadPartialError, "hadErrors must be true when any browser fails")
+    }
+
+    func testAllBrowsersSucceedHadErrorsFalse() throws {
+        let source = FakeTabSource(byBrowser: [
+            "BrowserA": [RawTab(title: "A", url: "https://a.com", windowIndex: 0, tabIndex: 0)],
+        ])
+        var hadPartialError = false
+        let tabs = try BrowserInspector(source: source)
+            .topTabs(rendererFootprintsByBrowser: [:], topN: 10, hadErrors: &hadPartialError)
+        XCTAssertEqual(tabs.count, 1)
+        XCTAssertFalse(hadPartialError, "hadErrors must be false when all browsers succeed")
     }
 
     func testCountMismatchLeavesEstimatesBlank() throws {
@@ -30,8 +65,9 @@ final class BrowserInspectorTests: XCTestCase {
             "Brave": [RawTab(title: "A", url: "https://a.com", windowIndex: 0, tabIndex: 0),
                       RawTab(title: "B", url: "https://b.com", windowIndex: 0, tabIndex: 1)],
         ])
+        var ignored = false
         let tabs = try BrowserInspector(source: source)
-            .topTabs(rendererFootprintsByBrowser: ["Brave": [500]], topN: 10)
+            .topTabs(rendererFootprintsByBrowser: ["Brave": [500]], topN: 10, hadErrors: &ignored)
         XCTAssertTrue(tabs.allSatisfy { $0.estimatedBytes == nil })
     }
 }
