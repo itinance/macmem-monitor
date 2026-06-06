@@ -3,8 +3,8 @@ import XCTest
 
 final class AppGrouperTests: XCTestCase {
     private func sample(_ pid: Int32, name: String, bundle: String?, footprint: UInt64,
-                        responsible: Int32? = nil) -> ProcessSample {
-        ProcessSample(pid: pid, ppid: 0, responsiblePID: responsible, bundleID: bundle,
+                        responsible: Int32? = nil, ppid: Int32 = 0) -> ProcessSample {
+        ProcessSample(pid: pid, ppid: ppid, responsiblePID: responsible, bundleID: bundle,
                       name: name, executablePath: nil, footprintBytes: footprint,
                       residentBytes: footprint, pageIns: 0, isReadable: true)
     }
@@ -53,5 +53,66 @@ final class AppGrouperTests: XCTestCase {
         let groupedTotal = groups.reduce(0) { $0 + Int($1.totalFootprintBytes) }
         XCTAssertEqual(groupedTotal, inputTotal)   // no process dropped or double-counted
         XCTAssertEqual(groupedTotal, 20)
+    }
+
+    // PPID fallback: bundle-less child whose parent has a bundle ID is folded in.
+    func testBundlelessChildFoldsIntoParentViaPPID() {
+        let samples = [
+            sample(100, name: "Ghostty", bundle: "com.mitchellh.ghostty", footprint: 200, ppid: 1),
+            sample(101, name: "pidinfo",  bundle: nil,                     footprint:  50, ppid: 100),
+        ]
+        let groups = AppGrouper().group(samples, topN: 10)
+        XCTAssertEqual(groups.count, 1, "child should be folded into parent")
+        XCTAssertEqual(groups[0].name, "Ghostty")
+        XCTAssertEqual(groups[0].bundleID, "com.mitchellh.ghostty")
+        XCTAssertEqual(groups[0].totalFootprintBytes, 250)
+        XCTAssertEqual(groups[0].processCount, 2)
+    }
+
+    // PPID fallback: bundle-less process with ppid == 1 (launchd) stays its own group.
+    func testBundlelessProcessWithLaunchdParentStaysOwnGroup() {
+        let samples = [
+            sample(200, name: "somecli", bundle: nil, footprint: 80, ppid: 1),
+        ]
+        let groups = AppGrouper().group(samples, topN: 10)
+        XCTAssertEqual(groups.count, 1)
+        XCTAssertEqual(groups[0].name, "somecli")
+        XCTAssertNil(groups[0].bundleID)
+    }
+
+    // PPID fallback: bundle-less process whose parent is NOT in the sample stays its own group.
+    func testBundlelessProcessWithMissingParentStaysOwnGroup() {
+        // ppid 999 is not in the samples array
+        let samples = [
+            sample(300, name: "helper", bundle: nil, footprint: 60, ppid: 999),
+        ]
+        let groups = AppGrouper().group(samples, topN: 10)
+        XCTAssertEqual(groups.count, 1)
+        XCTAssertEqual(groups[0].name, "helper")
+        XCTAssertNil(groups[0].bundleID)
+    }
+
+    // A process WITH its own bundle ID must NOT be merged into a parent that has a different bundle ID.
+    func testProcessWithBundleIDKeepsOwnIdentity() {
+        let samples = [
+            sample(400, name: "ParentApp", bundle: "com.parent.App",  footprint: 300, ppid: 1),
+            sample(401, name: "ChildApp",  bundle: "com.child.App",   footprint: 100, ppid: 400),
+        ]
+        let groups = AppGrouper().group(samples, topN: 10)
+        XCTAssertEqual(groups.count, 2, "each app with its own bundleID must remain separate")
+        let names = groups.map { $0.name }.sorted()
+        XCTAssertEqual(names, ["ChildApp", "ParentApp"])
+    }
+
+    // PPID cycle (A.ppid=B, B.ppid=A, both bundle-less) must terminate without infinite loop.
+    func testPPIDCycleDoesNotInfiniteLoop() {
+        let samples = [
+            sample(500, name: "cycleA", bundle: nil, footprint: 10, ppid: 501),
+            sample(501, name: "cycleB", bundle: nil, footprint: 10, ppid: 500),
+        ]
+        let groups = AppGrouper().group(samples, topN: 10)
+        let inputTotal  = samples.reduce(0) { $0 + Int($1.footprintBytes) }
+        let groupedTotal = groups.reduce(0) { $0 + Int($1.totalFootprintBytes) }
+        XCTAssertEqual(groupedTotal, inputTotal, "no process dropped or double-counted in PPID cycle")
     }
 }

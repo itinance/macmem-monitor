@@ -43,10 +43,22 @@ public struct AppGrouper {
         guard visited.insert(s.pid).inserted else {
             return (Self.cleanName(s.name), s.bundleID.map(Self.baseBundleID))
         }
+        // Step 1: responsiblePID (highest-fidelity signal, requires private API or entitlement).
         if let rpid = s.responsiblePID, rpid != s.pid, let owner = byPID[rpid] {
             return resolveOwner(owner, byPID: byPID, visited: visited)
         }
-        return (Self.cleanName(s.name), s.bundleID.map(Self.baseBundleID))
+        // Step 2: process has its own bundle ID → it is an app (or a helper already
+        // handled by baseBundleID suffix-stripping).  Keep its identity; do NOT walk up.
+        if s.bundleID != nil {
+            return (Self.cleanName(s.name), s.bundleID.map(Self.baseBundleID))
+        }
+        // Step 3: PPID fallback — fold bundle-less children into their launching app.
+        // Guard: ppid must be > 1 (skip launchd) and parent must exist in readable samples.
+        if s.ppid > 1, let parent = byPID[s.ppid] {
+            return resolveOwner(parent, byPID: byPID, visited: visited)
+        }
+        // Step 4: no usable owner signal — return the process under its own name.
+        return (Self.cleanName(s.name), nil)
     }
 
     static func baseBundleID(_ id: String) -> String {
