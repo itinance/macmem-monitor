@@ -90,6 +90,56 @@ final class RendererTests: XCTestCase {
                       "partial note must appear even when some tabs were returned")
     }
 
+    // FINDING B: column alignment — memory string must start at the same offset
+    // for a short name and a long (truncated) name.
+    func testTopAppsColumnsAlignAcrossShortAndLongNames() {
+        let shortName = "Safari"
+        let longName = "com.apple.WebKit.WebContent.XPC.SuperLongProcessNameThatExceedsColumn"
+        let snap = MemorySnapshot(
+            topApps: [
+                AppGroup(name: shortName, bundleID: nil,
+                         totalFootprintBytes: 123_456_789, processCount: 1, pids: [1]),
+                AppGroup(name: longName, bundleID: nil,
+                         totalFootprintBytes: 987_654_321, processCount: 2, pids: [2, 3])
+            ],
+            appsStatus: .ok, unreadableProcessCount: 0,
+            swap: nil, swapCulprits: [], swapStatus: .ok,
+            topTabs: [], tabsStatus: .ok)
+        let out = TextRenderer.render(snap)
+        let lines = out.split(separator: "\n", omittingEmptySubsequences: false)
+        // Find the two app rows (they follow "== TOP APPS ==")
+        let appLines = lines.filter { $0.contains(" 1. ") || $0.contains(" 2. ") }
+        XCTAssertEqual(appLines.count, 2, "Expected two app rows")
+        guard appLines.count == 2 else { return }
+
+        // The memory substring (e.g. "117.7 MB") should start at the same character offset.
+        func memOffset(_ line: Substring) -> Int? {
+            // Memory field starts after the name+padding column (after the double-space separator)
+            // Find the first digit of the memory value by searching after the name column.
+            // We look for the byte-value pattern: digits followed by space then a unit letter.
+            // A simpler proxy: find the position of the last run of spaces before the memory value.
+            // Actually just assert the columns are equal by finding the index of "MB" or "GB" or "KB"
+            // and subtracting the unit width back to the start of the number.
+            // Easiest: find the position of the two-space separator that precedes the memory column.
+            if let range = line.range(of: "  ", options: .backwards,
+                                      range: line.startIndex..<(line.lastIndex(of: "(") ?? line.endIndex)) {
+                return line.distance(from: line.startIndex, to: range.lowerBound)
+            }
+            return nil
+        }
+
+        let offset1 = memOffset(appLines[0])
+        let offset2 = memOffset(appLines[1])
+        XCTAssertNotNil(offset1)
+        XCTAssertNotNil(offset2)
+        XCTAssertEqual(offset1, offset2,
+                       "Memory column should start at the same offset for short and long names")
+
+        // Long name should be truncated with "…"
+        XCTAssertTrue(appLines[1].contains("…"),
+                      "Name longer than the column width should be truncated with '…'")
+    }
+
     func testJSONRendererIsValidAndRoundTrips() throws {
         let json = try JSONRenderer.render(fixture())
         let decoded = try JSONDecoder().decode(MemorySnapshot.self, from: Data(json.utf8))
