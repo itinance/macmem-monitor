@@ -117,3 +117,15 @@ public struct SnapshotBuilder {
         return false
     }
 }
+
+/// Returns the process exit code for the given snapshot.
+///
+/// Exits non-zero only when BOTH the apps section AND the swap section are `.error`,
+/// meaning the core memory provider fundamentally failed. Tabs failing alone is not fatal.
+/// Partial results (`.partial`, `.permissionNeeded`) still exit 0.
+public func snapshotExitCode(_ snapshot: MemorySnapshot) -> Int32 {
+    if snapshot.appsStatus == .error && snapshot.swapStatus == .error {
+        return 1
+    }
+    return 0
+}
