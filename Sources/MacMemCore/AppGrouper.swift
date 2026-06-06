@@ -10,6 +10,7 @@ public struct AppGrouper {
     public init() {}
 
     public func group(_ samples: [ProcessSample], topN: Int = 10) -> [AppGroup] {
+        let limit = max(0, topN)
         let byPID = Dictionary(samples.map { ($0.pid, $0) }, uniquingKeysWith: { a, _ in a })
 
         struct Acc { var name: String; var bundleID: String?; var total: UInt64; var pids: [Int32] }
@@ -33,7 +34,7 @@ public struct AppGrouper {
                             totalFootprintBytes: $0.total,
                             processCount: $0.pids.count, pids: $0.pids.sorted()) }
             .sorted { $0.totalFootprintBytes > $1.totalFootprintBytes }
-            .prefix(topN)
+            .prefix(limit)
             .map { $0 }
     }
 

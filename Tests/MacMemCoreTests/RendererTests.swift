@@ -140,6 +140,18 @@ final class RendererTests: XCTestCase {
                       "Name longer than the column width should be truncated with '…'")
     }
 
+    // Fix 7 (Major): --no-swap must suppress the SWAP section entirely.
+    func testRenderWithNoSwapOmitsSwapSection() {
+        let out = TextRenderer.render(fixture(), includeSwap: false)
+        XCTAssertFalse(out.contains("== SWAP =="), "SWAP section must not appear when includeSwap: false")
+    }
+
+    // Fix 7 (Major): --no-tabs must suppress the BROWSER TABS section entirely.
+    func testRenderWithNoTabsOmitsTabsSection() {
+        let out = TextRenderer.render(fixture(), includeTabs: false)
+        XCTAssertFalse(out.contains("BROWSER TABS"), "BROWSER TABS section must not appear when includeTabs: false")
+    }
+
     func testJSONRendererIsValidAndRoundTrips() throws {
         let json = try JSONRenderer.render(fixture())
         let decoded = try JSONDecoder().decode(MemorySnapshot.self, from: Data(json.utf8))

@@ -120,6 +120,16 @@ final class AppGrouperTests: XCTestCase {
         XCTAssertEqual(names, ["cycleA", "cycleB"])
     }
 
+    // Fix 1 (Critical): negative topN must not trap — must return empty array.
+    func testNegativeTopNReturnsEmpty() {
+        let samples = [
+            sample(1, name: "App", bundle: "com.x.app", footprint: 100),
+        ]
+        // Must not crash and must return []
+        let groups = AppGrouper().group(samples, topN: -1)
+        XCTAssertEqual(groups.count, 0)
+    }
+
     // 3-hop chain: child (no bundle) → shell (no bundle) → app (bundle).
     // The shell's immediate parent IS an app → shell folds into app.
     // The child's immediate parent is bundle-less (shell) → child does NOT fold; stays separate.

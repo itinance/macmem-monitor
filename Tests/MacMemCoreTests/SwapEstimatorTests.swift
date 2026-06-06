@@ -34,6 +34,16 @@ final class SwapEstimatorTests: XCTestCase {
         XCTAssertEqual(result.reduce(0) { $0 + $1.estimatedSwapBytes }, swap.usedBytes)
     }
 
+    // Fix 2 (Critical): negative topN must not trap — must return empty array.
+    func testNegativeTopNReturnsEmpty() {
+        let swap = SwapInfo(totalBytes: 100, usedBytes: 80, freeBytes: 20, swapIns: 10, swapOuts: 5)
+        let groups = [group("Heavy", pids: [1])]
+        let samples = [sample(1, pageIns: 600)]
+        // Must not crash and must return []
+        let result = SwapEstimator().culprits(groups: groups, samples: samples, swap: swap, topN: -1)
+        XCTAssertEqual(result.count, 0)
+    }
+
     func testGroupsWithZeroPageInsAreExcluded() {
         let swap = SwapInfo(totalBytes: 100, usedBytes: 50, freeBytes: 50, swapIns: 1, swapOuts: 1)
         let result = SwapEstimator().culprits(groups: [group("Z", pids: [1])],
