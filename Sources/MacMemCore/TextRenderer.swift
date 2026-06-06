@@ -21,9 +21,9 @@ public enum TextRenderer {
             if snap.swapCulprits.isEmpty {
                 lines.append("No swap in use, or no estimable culprits.")
             } else {
-                lines.append("Likely contributors (estimates):")
+                lines.append("Likely contributors (estimated swap, not measured):")
                 for c in snap.swapCulprits {
-                    lines.append("   ~ \(c.appName)  [\(c.confidence.rawValue)]")
+                    lines.append("   ~\(ByteFormat.string(c.estimatedSwapBytes))  \(c.appName)  [\(c.confidence.rawValue)]")
                 }
             }
         } else {

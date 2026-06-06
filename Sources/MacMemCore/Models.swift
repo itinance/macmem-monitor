@@ -63,11 +63,18 @@ public struct SwapCulprit: Sendable, Equatable, Codable {
     public let appName: String
     public let bundleID: String?
     public let score: Double
+    /// Heuristic, NOT measured. macOS does not expose per-process swap; this is the
+    /// app's proportional share of *used* swap, weighted by its page-in proxy
+    /// (`score`). Always presented as an estimate (`~` + confidence) — do not treat
+    /// as ground truth.
+    public let estimatedSwapBytes: UInt64
     public let confidence: Confidence
 
-    public init(appName: String, bundleID: String?, score: Double, confidence: Confidence) {
+    public init(appName: String, bundleID: String?, score: Double,
+                estimatedSwapBytes: UInt64, confidence: Confidence) {
         self.appName = appName; self.bundleID = bundleID
-        self.score = score; self.confidence = confidence
+        self.score = score; self.estimatedSwapBytes = estimatedSwapBytes
+        self.confidence = confidence
     }
 }
 
