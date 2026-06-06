@@ -105,6 +105,7 @@ final class AppGrouperTests: XCTestCase {
     }
 
     // PPID cycle (A.ppid=B, B.ppid=A, both bundle-less) must terminate without infinite loop.
+    // With the app-parent constraint neither folds (parent is bundle-less), so two separate groups.
     func testPPIDCycleDoesNotInfiniteLoop() {
         let samples = [
             sample(500, name: "cycleA", bundle: nil, footprint: 10, ppid: 501),
@@ -114,5 +115,32 @@ final class AppGrouperTests: XCTestCase {
         let inputTotal  = samples.reduce(0) { $0 + Int($1.footprintBytes) }
         let groupedTotal = groups.reduce(0) { $0 + Int($1.totalFootprintBytes) }
         XCTAssertEqual(groupedTotal, inputTotal, "no process dropped or double-counted in PPID cycle")
+        XCTAssertEqual(groups.count, 2, "both bundle-less cycle members stay as separate groups")
+        let names = groups.map { $0.name }.sorted()
+        XCTAssertEqual(names, ["cycleA", "cycleB"])
+    }
+
+    // 3-hop chain: child (no bundle) → shell (no bundle) → app (bundle).
+    // The shell's immediate parent IS an app → shell folds into app.
+    // The child's immediate parent is bundle-less (shell) → child does NOT fold; stays separate.
+    func testBundlelessChildOfShellDoesNotFoldThroughShellIntoApp() {
+        let samples = [
+            sample(600, name: "Ghostty",     bundle: "com.mitchellh.ghostty", footprint: 200, ppid: 1),
+            sample(601, name: "zsh",         bundle: nil,                     footprint:  30, ppid: 600),
+            sample(602, name: "swift-build", bundle: nil,                     footprint: 150, ppid: 601),
+        ]
+        let groups = AppGrouper().group(samples, topN: 10)
+        // zsh's parent (Ghostty) has a bundle ID → zsh folds into Ghostty.
+        // swift-build's parent (zsh) has NO bundle ID → swift-build stays its own group.
+        XCTAssertEqual(groups.count, 2, "swift-build must not be buried under Ghostty")
+        let byName = Dictionary(groups.map { ($0.name, $0) }, uniquingKeysWith: { a, _ in a })
+        let ghosttyGroup = byName["Ghostty"]
+        XCTAssertNotNil(ghosttyGroup)
+        XCTAssertEqual(ghosttyGroup?.totalFootprintBytes, 230, "Ghostty + zsh = 230")
+        XCTAssertEqual(ghosttyGroup?.processCount, 2)
+        let swiftGroup = byName["swift-build"]
+        XCTAssertNotNil(swiftGroup)
+        XCTAssertEqual(swiftGroup?.totalFootprintBytes, 150)
+        XCTAssertEqual(swiftGroup?.processCount, 1)
     }
 }
