@@ -32,18 +32,19 @@ public enum TextRenderer {
 
         lines.append("")
         lines.append("== BROWSER TABS (heaviest) ==")
-        if snap.topTabs.isEmpty {
+        // Always show the status note for non-ok states, even when some tabs were returned
+        // (e.g. partial: browser A succeeded, browser B failed — show what we got plus the note).
+        if snap.tabsStatus != .ok {
             lines.append(tabsStatusNote(snap.tabsStatus))
-        } else {
-            for (i, tab) in snap.topTabs.enumerated() {
-                if let bytes = tab.estimatedBytes {
-                    // FINDING 4: carry the confidence label on estimated rows
-                    let mem = "~\(ByteFormat.string(bytes)) [\(tab.confidence.rawValue)]"
-                    lines.append(String(format: "%2d. %@  %@", i + 1, mem as NSString, tab.url as NSString))
-                } else {
-                    lines.append(String(format: "%2d. %10@  %@", i + 1, "(n/a)" as NSString,
-                                        tab.url as NSString))
-                }
+        }
+        for (i, tab) in snap.topTabs.enumerated() {
+            if let bytes = tab.estimatedBytes {
+                // Carry the confidence label on estimated rows (spec: every estimate has a marker)
+                let mem = "~\(ByteFormat.string(bytes)) [\(tab.confidence.rawValue)]"
+                lines.append(String(format: "%2d. %@  %@", i + 1, mem as NSString, tab.url as NSString))
+            } else {
+                lines.append(String(format: "%2d. %10@  %@", i + 1, "(n/a)" as NSString,
+                                    tab.url as NSString))
             }
         }
 
