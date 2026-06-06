@@ -26,9 +26,17 @@ public struct AppleScriptTabSource: TabSource {
     }
 
     public func tabs(for browser: String) throws -> [RawTab] {
+        guard Self.isSafeBrowserName(browser) else { throw TabError.unsafeBrowserName(browser) }
         let script = browser == "Safari" ? Self.safariScript : Self.chromiumScript(app: browser)
         let output = try runAppleScript(script)
         return Self.parse(output)
+    }
+
+    /// Browser names are interpolated into AppleScript source, so restrict them
+    /// to a safe character set (letters, digits, spaces, dots) to prevent
+    /// AppleScript injection via the public `init(candidates:)`.
+    static func isSafeBrowserName(_ name: String) -> Bool {
+        !name.isEmpty && name.allSatisfy { $0.isLetter || $0.isNumber || $0 == " " || $0 == "." }
     }
 
     // Output format: one tab per line as "windowIndex\ttabIndex\tURL\tTITLE"
@@ -67,6 +75,15 @@ public struct AppleScriptTabSource: TabSource {
         """
 
     private func runAppleScript(_ source: String) throws -> String {
+        if Thread.isMainThread {
+            return try executeAppleScript(source)
+        } else {
+            // NSAppleScript is main-thread-affined; hop to main when called off-main.
+            return try DispatchQueue.main.sync { try executeAppleScript(source) }
+        }
+    }
+
+    private func executeAppleScript(_ source: String) throws -> String {
         var error: NSDictionary?
         guard let script = NSAppleScript(source: source) else { throw TabError.compileFailed }
         let result = script.executeAndReturnError(&error)
@@ -90,4 +107,5 @@ public struct AppleScriptTabSource: TabSource {
 enum TabError: Error {
     case compileFailed
     case execFailed(String)
+    case unsafeBrowserName(String)
 }
