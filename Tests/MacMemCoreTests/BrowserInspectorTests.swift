@@ -45,4 +45,16 @@ extension BrowserInspectorTests {
         XCTAssertEqual(tabs[0].title, "Alpha")
         XCTAssertEqual(tabs[1].title, "Beta\textra")        // tab-in-title preserved
     }
+
+    func testRejectsUnsafeBrowserNames() {
+        XCTAssertTrue(AppleScriptTabSource.isSafeBrowserName("Brave Browser"))
+        XCTAssertTrue(AppleScriptTabSource.isSafeBrowserName("Google Chrome"))
+        XCTAssertFalse(AppleScriptTabSource.isSafeBrowserName("\") end tell\ndo shell script \"rm\"\ntell application (\""))
+        XCTAssertFalse(AppleScriptTabSource.isSafeBrowserName(""))
+        XCTAssertThrowsError(try AppleScriptTabSource().tabs(for: "evil\"name")) { error in
+            guard case TabError.unsafeBrowserName = error else {
+                return XCTFail("expected unsafeBrowserName, got \(error)")
+            }
+        }
+    }
 }
