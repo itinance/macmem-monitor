@@ -9,6 +9,7 @@ public struct CompressedMemoryAggregator {
 
     public func entries(groups: [AppGroup], samples: [ProcessSample], topN: Int = 10) -> [CompressedMemoryEntry] {
         let limit = max(0, topN)
+        // First-wins dedup handles transient duplicate PIDs that proc_listpids may return.
         let compressedByPID = Dictionary(
             samples.compactMap { s in s.compressedBytes.map { (s.pid, $0) } },
             uniquingKeysWith: { a, _ in a })

@@ -43,21 +43,23 @@ public enum TextRenderer {
             if let swap = snap.swap {
                 lines.append("Used \(ByteFormat.string(swap.usedBytes)) / \(ByteFormat.string(swap.totalBytes))"
                              + "   (in: \(swap.swapIns), out: \(swap.swapOuts))")
-                lines.append("")
-                if snap.compressedUsers.isEmpty {
-                    lines.append("Compressed memory per app: none measured"
-                                 + (snap.compressedUnreadableCount > 0 ? " (run with sudo to measure more)." : "."))
-                } else {
-                    lines.append("Compressed memory per app (measured — RAM held by the compressor, swap precursor):")
-                    for c in snap.compressedUsers {
-                        lines.append("   \(ByteFormat.string(c.compressedBytes))  \(c.appName)  [measured]")
-                    }
-                    if snap.compressedUnreadableCount > 0 {
-                        lines.append("   (\(snap.compressedUnreadableCount) processes could not be measured; run with sudo for fuller coverage)")
-                    }
-                }
             } else {
+                // Swap totals unavailable, but measured compressed memory may still be present.
                 lines.append(statusNote(snap.swapStatus, unreadable: 0))
+            }
+            if !snap.compressedUsers.isEmpty {
+                lines.append("")
+                lines.append("Compressed memory per app (measured — RAM held by the compressor, swap precursor):")
+                for c in snap.compressedUsers {
+                    lines.append("   \(ByteFormat.string(c.compressedBytes))  \(c.appName)  [measured]")
+                }
+                if snap.compressedUnreadableCount > 0 {
+                    lines.append("   (\(snap.compressedUnreadableCount) accessible processes could not be measured; run with sudo for fuller coverage)")
+                }
+            } else if snap.swap != nil {
+                lines.append("")
+                lines.append("Compressed memory per app: none measured"
+                             + (snap.compressedUnreadableCount > 0 ? " (run with sudo to measure more)." : "."))
             }
         }
 
