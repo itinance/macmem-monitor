@@ -69,6 +69,13 @@ struct Macmem: ParsableCommand {
             FileHandle.standardError.write(Data(
                 "\n\(snapshot.unreadableProcessCount) processes not readable — run `sudo macmem` for full coverage.\n".utf8))
         }
+        // When running as root, AppleScript / GUI-app enumeration is unavailable so the
+        // browser-tabs section will always appear empty.  Emit a targeted hint so the user
+        // knows this is a privilege issue, not "no heavy tabs".
+        if geteuid() == 0 && !noTabs {
+            FileHandle.standardError.write(Data(
+                "Browser tabs can't be read as root — run macmem without sudo (and grant Automation access) to list tabs.\n".utf8))
+        }
     }
 }
 
