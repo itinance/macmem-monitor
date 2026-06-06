@@ -51,7 +51,11 @@ struct Macmem: ParsableCommand {
             .build(topN: top, includeTabs: !noTabs, includeSwap: !noSwap)
 
         if json {
-            if let out = try? JSONRenderer.render(snapshot) { print(out) }
+            do {
+                print(try JSONRenderer.render(snapshot))
+            } catch {
+                FileHandle.standardError.write(Data("Error encoding JSON: \(error)\n".utf8))
+            }
         } else {
             print(TextRenderer.render(snapshot))
         }
