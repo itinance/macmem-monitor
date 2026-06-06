@@ -35,3 +35,14 @@ final class BrowserInspectorTests: XCTestCase {
         XCTAssertTrue(tabs.allSatisfy { $0.estimatedBytes == nil })
     }
 }
+
+extension BrowserInspectorTests {
+    func testAppleScriptOutputParsing() {
+        let raw = "0\t0\thttps://a.com\tAlpha\n0\t1\thttps://b.com\tBeta\textra\n0\t2\t\tEmptyURL\n"
+        let tabs = AppleScriptTabSource.parse(raw)
+        XCTAssertEqual(tabs.count, 2)                       // empty-URL line dropped
+        XCTAssertEqual(tabs[0].url, "https://a.com")
+        XCTAssertEqual(tabs[0].title, "Alpha")
+        XCTAssertEqual(tabs[1].title, "Beta\textra")        // tab-in-title preserved
+    }
+}
