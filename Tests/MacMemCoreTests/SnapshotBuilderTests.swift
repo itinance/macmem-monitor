@@ -5,10 +5,10 @@ private struct DummyError: Error {}
 
 final class SnapshotBuilderTests: XCTestCase {
     private func sample(_ pid: Int32, name: String, bundle: String?, footprint: UInt64,
-                        pageIns: UInt64 = 0, compressed: UInt64? = nil, readable: Bool = true) -> ProcessSample {
+                        pageIns: UInt64 = 0, readable: Bool = true) -> ProcessSample {
         ProcessSample(pid: pid, ppid: 0, responsiblePID: nil, bundleID: bundle, name: name,
                       executablePath: nil, footprintBytes: footprint, residentBytes: footprint,
-                      pageIns: pageIns, compressedBytes: compressed, isReadable: readable)
+                      pageIns: pageIns, isReadable: readable)
     }
 
     func testBuildsAllSectionsOK() {
@@ -61,6 +61,29 @@ final class SnapshotBuilderTests: XCTestCase {
             processes: [], swap: SwapInfo(totalBytes: 0, usedBytes: 0, freeBytes: 0, swapIns: 0, swapOuts: 0))
         let snap = SnapshotBuilder(provider: provider, tabSource: nil).build()
         XCTAssertEqual(snap.tabsStatus, .permissionNeeded)
+    }
+
+    func testCompressedMapProducesGroupedAndRankedCompressedUsers() {
+        // Two apps: Heavy (pids 1+2) and Light (pid 3)
+        let provider = FakeMemoryProvider(
+            processes: [
+                sample(1, name: "Heavy App", bundle: "com.heavy", footprint: 100),
+                sample(2, name: "Heavy App Helper", bundle: "com.heavy.helper", footprint: 50),
+                sample(3, name: "Light App", bundle: "com.light", footprint: 20),
+            ],
+            swap: SwapInfo(totalBytes: 200, usedBytes: 100, freeBytes: 100, swapIns: 0, swapOuts: 0),
+            // pid 1 → 600, pid 2 → 200, pid 3 → 200; Heavy total = 800, Light = 200
+            compressed: [1: 600, 2: 200, 3: 200])
+        let snap = SnapshotBuilder(provider: provider, tabSource: nil).build(topN: 10)
+        // Heavy App and its helper share bundle prefix "com.heavy" → grouped under Heavy App
+        let names = snap.compressedUsers.map(\.appName)
+        XCTAssertTrue(names.contains("Heavy App"), "Heavy App should appear in compressedUsers")
+        // Heavy App should have more compressed bytes than Light App
+        if let heavy = snap.compressedUsers.first(where: { $0.appName == "Heavy App" }),
+           let light = snap.compressedUsers.first(where: { $0.appName == "Light App" }) {
+            XCTAssertGreaterThan(heavy.compressedBytes, light.compressedBytes,
+                                 "Heavy App should rank above Light App by compressed bytes")
+        }
     }
 
     // FINDING 1: renderer-only filtering — a realistic group (main + GPU + 3 renderers)

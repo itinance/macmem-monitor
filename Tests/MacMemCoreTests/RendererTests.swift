@@ -37,8 +37,10 @@ final class RendererTests: XCTestCase {
                        "compressed memory rows must NOT contain ~ prefix (these are measured, not estimated)")
         XCTAssertFalse(out.contains("medium"),         // NO old confidence label
                        "compressed memory rows must NOT contain confidence labels like 'medium'")
-        XCTAssertTrue(out.contains("could not be measured"),
+        XCTAssertTrue(out.contains("could not be read from top"),
                       "coverage footer should appear when compressedUnreadableCount > 0")
+        XCTAssertFalse(out.lowercased().contains("sudo"),
+                       "compressed section footer must not mention sudo")
         // FINDING 4: confidence label must appear on estimated tab rows
         XCTAssertTrue(out.contains("[low]"),
                       "estimated tab rows should carry a [low] confidence label")
