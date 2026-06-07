@@ -163,6 +163,20 @@ final class RendererTests: XCTestCase {
         XCTAssertFalse(out.contains("BROWSER TABS"), "BROWSER TABS section must not appear when includeTabs: false")
     }
 
+    func testTopUnavailableRendersAsUnavailableNotNoneMeasured() {
+        let snap = MemorySnapshot(
+            topApps: [], appsStatus: .ok, unreadableProcessCount: 0,
+            swap: SwapInfo(totalBytes: 1_073_741_824, usedBytes: 536_870_912,
+                           freeBytes: 536_870_912, swapIns: 0, swapOuts: 0),
+            compressedUsers: [], compressedAvailable: false,
+            swapStatus: .ok, topTabs: [], tabsStatus: .ok)
+        let out = TextRenderer.render(snap)
+        XCTAssertTrue(out.contains("unavailable (could not read from top)"),
+                      "top failure should render as unavailable, not none measured")
+        XCTAssertFalse(out.contains("none measured"),
+                       "top failure must not render as 'none measured'")
+    }
+
     func testJSONRendererIsValidAndRoundTrips() throws {
         let json = try JSONRenderer.render(fixture())
         let decoded = try JSONDecoder().decode(MemorySnapshot.self, from: Data(json.utf8))

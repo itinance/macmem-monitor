@@ -34,6 +34,7 @@ public struct SnapshotBuilder {
         var swap: SwapInfo?
         var compressedUsers: [CompressedMemoryEntry] = []
         var compressedMissing = 0
+        var compressedAvailable = true   // neutral default when --no-swap skips this block
         var swapStatus: SectionStatus = .ok
         if includeSwap {
             do {
@@ -42,11 +43,12 @@ public struct SnapshotBuilder {
                 swapStatus = .error
             }
             let compressedMap = (try? provider.compressedByPID()) ?? [:]
+            compressedAvailable = !compressedMap.isEmpty
             compressedUsers = CompressedMemoryAggregator().entries(groups: topApps, compressedByPID: compressedMap, topN: topN)
-            // pids among the shown apps that top didn't report (transient races). If top
-            // failed entirely (empty map), count all shown pids so the renderer can flag it.
+            // Only count per-pid misses when top actually succeeded; if it failed entirely
+            // (empty map) we already signal that via compressedAvailable = false.
             let shownPIDs = Set(topApps.flatMap { $0.pids })
-            compressedMissing = compressedMap.isEmpty ? shownPIDs.count : shownPIDs.filter { compressedMap[$0] == nil }.count
+            compressedMissing = compressedAvailable ? shownPIDs.filter { compressedMap[$0] == nil }.count : 0
         }
 
         // --- Tabs section ---
@@ -70,6 +72,7 @@ public struct SnapshotBuilder {
                               unreadableProcessCount: unreadable, swap: swap,
                               compressedUsers: compressedUsers,
                               compressedUnreadableCount: compressedMissing,
+                              compressedAvailable: compressedAvailable,
                               swapStatus: swapStatus,
                               topTabs: topTabs, tabsStatus: tabsStatus)
     }

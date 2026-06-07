@@ -94,18 +94,23 @@ public struct MemorySnapshot: Sendable, Equatable, Codable {
     public let swap: SwapInfo?
     public let compressedUsers: [CompressedMemoryEntry]
     public let compressedUnreadableCount: Int
+    /// True when top(1) returned data (even if no apps had nonzero compressed memory).
+    /// False when top failed entirely, so the renderer can distinguish "nothing compressed"
+    /// from "could not read from top".
+    public let compressedAvailable: Bool
     public let swapStatus: SectionStatus
     public let topTabs: [BrowserTab]
     public let tabsStatus: SectionStatus
 
     public init(topApps: [AppGroup], appsStatus: SectionStatus, unreadableProcessCount: Int,
                 swap: SwapInfo?, compressedUsers: [CompressedMemoryEntry],
-                compressedUnreadableCount: Int = 0, swapStatus: SectionStatus,
-                topTabs: [BrowserTab], tabsStatus: SectionStatus) {
+                compressedUnreadableCount: Int = 0, compressedAvailable: Bool = true,
+                swapStatus: SectionStatus, topTabs: [BrowserTab], tabsStatus: SectionStatus) {
         self.topApps = topApps; self.appsStatus = appsStatus
         self.unreadableProcessCount = unreadableProcessCount
         self.swap = swap; self.compressedUsers = compressedUsers
         self.compressedUnreadableCount = compressedUnreadableCount
+        self.compressedAvailable = compressedAvailable
         self.swapStatus = swapStatus
         self.topTabs = topTabs; self.tabsStatus = tabsStatus
     }
