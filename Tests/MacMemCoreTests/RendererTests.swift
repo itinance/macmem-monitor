@@ -182,4 +182,51 @@ final class RendererTests: XCTestCase {
         let decoded = try JSONDecoder().decode(MemorySnapshot.self, from: Data(json.utf8))
         XCTAssertEqual(decoded, fixture())
     }
+
+    // middleTruncate preserves the head and the trailing token; ellipsis sits in the middle.
+    func testMiddleTruncatePreservesHeadAndTail() {
+        let s = "make — projectAlpha/services/backend (worker-multi-2)"
+        let out = TextRenderer.middleTruncate(s, width: 30)
+        XCTAssertEqual(out.count, 30, "truncated label must be exactly the requested width")
+        XCTAssertTrue(out.hasPrefix("make"), "process name must survive at the head")
+        XCTAssertTrue(out.hasSuffix("2)"), "trailing argv token must survive at the tail")
+        XCTAssertTrue(out.contains("…"), "middle truncation uses an ellipsis")
+    }
+
+    // A label at or under the width is returned unchanged.
+    func testMiddleTruncateNoOpWhenWithinWidth() {
+        XCTAssertEqual(TextRenderer.middleTruncate("short", width: 30), "short")
+    }
+
+    // Degenerate: name + trailing token alone exceed the cap — name must NOT be dropped.
+    func testMiddleTruncateDegenerateKeepsName() {
+        let s = "make — " + String(repeating: "x", count: 200) + " (run-api-target)"
+        let out = TextRenderer.middleTruncate(s, width: 60)
+        XCTAssertEqual(out.count, 60)
+        XCTAssertTrue(out.hasPrefix("make"), "process name must never be silently dropped")
+        XCTAssertTrue(out.hasSuffix(")"), "trailing token end must survive")
+    }
+
+    // TOP APPS auto-sizes the name column to the longest shown label, capped at 60,
+    // and middle-truncates only beyond the cap (trailing argv token survives).
+    func testTopAppsAutoSizesAndMiddleTruncatesOverCap() {
+        let longLabel = "make — " + String(repeating: "deep/", count: 30) + "backend (worker-multi-2)"
+        let snap = MemorySnapshot(
+            topApps: [
+                AppGroup(name: "node — svc/api (index.js)", bundleID: nil,
+                         totalFootprintBytes: 100, processCount: 1, pids: [1]),
+                AppGroup(name: longLabel, bundleID: nil,
+                         totalFootprintBytes: 200, processCount: 2, pids: [2, 3]),
+            ],
+            appsStatus: .ok, unreadableProcessCount: 0,
+            swap: nil, compressedUsers: [], swapStatus: .ok,
+            topTabs: [], tabsStatus: .ok)
+        let out = TextRenderer.render(snap)
+        // The shorter, under-cap label renders in full.
+        XCTAssertTrue(out.contains("node — svc/api (index.js)"))
+        // The over-cap label is middle-truncated but keeps its name and trailing token.
+        XCTAssertTrue(out.contains("…"), "over-cap label must be middle-truncated")
+        XCTAssertTrue(out.contains("(worker-multi-2)"), "trailing argv token must survive truncation")
+        XCTAssertTrue(out.contains("make — "), "process name + dir head must survive truncation")
+    }
 }
