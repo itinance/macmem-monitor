@@ -1,54 +1,43 @@
 import Foundation
 
-/// Turns raw browser tabs into `BrowserTab`s. Per-tab memory is a heuristic:
-/// when a browser's renderer-process count equals its tab count, we pair
-/// renderer footprints (largest → largest) to tabs. Any mismatch leaves the
-/// estimate blank, per the spec's "leave blank when ambiguous" rule.
+/// Pairs each running browser's open tabs with its MEASURED total process memory.
+///
+/// Per-tab memory is deliberately NOT reported: no browser's automation API
+/// exposes it (the `tab` object carries only id/title/URL/loading, and no public
+/// API maps a renderer/WebContent PID to a URL). Pairing renderer footprints to
+/// tabs by size — as an earlier version did — produces a plausible-but-false
+/// number, so we drop it. Instead each browser shows one real aggregate total
+/// (from `SnapshotBuilder.browserTotals`) with its tabs listed underneath.
 public struct BrowserInspector {
     let source: TabSource
     public init(source: TabSource) { self.source = source }
 
-    /// Collect tabs from all running browsers.
+    /// Build one `BrowserMemory` per running browser.
     ///
     /// - Parameters:
-    ///   - rendererFootprintsByBrowser: per-renderer footprints keyed by browser display name.
-    ///   - topN: maximum number of tabs to return.
-    ///   - hadErrors: set to `true` if at least one browser's tab fetch failed; untouched
-    ///     when all browsers succeed. The caller uses this to set `.partial` status while
-    ///     still returning the tabs that did succeed.
-    public func topTabs(rendererFootprintsByBrowser: [String: [UInt64]] = [:],
-                        topN: Int = 10,
-                        hadErrors: inout Bool) -> [BrowserTab] {
-        let limit = max(0, topN)
-        var all: [BrowserTab] = []
-
+    ///   - browserTotals: measured `(bytes, count)` per browser display name. `bytes`
+    ///     is nil when the browser's memory is not honestly attributable (Safari without
+    ///     `--responsible-pid`); a missing key also yields a nil total.
+    ///   - hadErrors: set to `true` if at least one browser's tab fetch failed; left
+    ///     untouched when all browsers succeed. The caller uses this to set `.partial`
+    ///     status while still returning the browsers that did succeed.
+    public func browsers(browserTotals: [String: (bytes: UInt64?, count: Int)] = [:],
+                         hadErrors: inout Bool) -> [BrowserMemory] {
+        var result: [BrowserMemory] = []
         for browser in source.runningBrowsers() {
             do {
                 let raw = try source.tabs(for: browser)
-                let footprints = rendererFootprintsByBrowser[browser] ?? []
-
-                if footprints.count == raw.count, !raw.isEmpty {
-                    let sortedFootprints = footprints.sorted(by: >)
-                    for (tab, bytes) in zip(raw, sortedFootprints) {
-                        all.append(BrowserTab(browser: browser, title: tab.title, url: tab.url,
-                                              estimatedBytes: bytes, confidence: .low))
-                    }
-                } else {
-                    for tab in raw {
-                        all.append(BrowserTab(browser: browser, title: tab.title, url: tab.url,
-                                              estimatedBytes: nil, confidence: .low))
-                    }
-                }
+                let tabs = raw.map { BrowserTab(title: $0.title, url: $0.url) }
+                let info = browserTotals[browser]
+                result.append(BrowserMemory(browser: browser,
+                                            totalFootprintBytes: info?.bytes,
+                                            processCount: info?.count ?? 0,
+                                            tabs: tabs))
             } catch {
-                // One browser failed — record the error signal and continue with others.
+                // One browser failed — record the signal and continue with the others.
                 hadErrors = true
             }
         }
-
-        // Heaviest first when estimates exist; tabs without estimates sort last.
-        return all
-            .sorted { ($0.estimatedBytes ?? 0) > ($1.estimatedBytes ?? 0) }
-            .prefix(limit)
-            .map { $0 }
+        return result
     }
 }

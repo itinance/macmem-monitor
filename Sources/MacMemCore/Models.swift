@@ -1,9 +1,5 @@
 import Foundation
 
-public enum Confidence: String, Sendable, Codable, Equatable {
-    case high, medium, low
-}
-
 public enum SectionStatus: String, Sendable, Codable, Equatable {
     case ok, partial, permissionNeeded, error
 }
@@ -19,14 +15,22 @@ public struct ProcessSample: Sendable, Equatable, Codable {
     public let residentBytes: UInt64
     public let pageIns: UInt64
     public let isReadable: Bool
+    /// Absolute current working directory, best-effort. `nil` when unreadable (other
+    /// users' processes without sudo, or any error). Used to disambiguate CLI groups.
+    public let workingDirectory: String?
+    /// Raw process arguments after the executable path, space-joined and trimmed.
+    /// `nil` when unreadable or empty. For `make -j8 run-api` this is `-j8 run-api`.
+    public let commandLine: String?
 
     public init(pid: Int32, ppid: Int32, responsiblePID: Int32?, bundleID: String?,
                 name: String, executablePath: String?, footprintBytes: UInt64,
-                residentBytes: UInt64, pageIns: UInt64, isReadable: Bool) {
+                residentBytes: UInt64, pageIns: UInt64, isReadable: Bool,
+                workingDirectory: String? = nil, commandLine: String? = nil) {
         self.pid = pid; self.ppid = ppid; self.responsiblePID = responsiblePID
         self.bundleID = bundleID; self.name = name; self.executablePath = executablePath
         self.footprintBytes = footprintBytes; self.residentBytes = residentBytes
         self.pageIns = pageIns; self.isReadable = isReadable
+        self.workingDirectory = workingDirectory; self.commandLine = commandLine
     }
 }
 
@@ -74,16 +78,33 @@ public struct CompressedMemoryEntry: Sendable, Equatable, Codable {
 }
 
 public struct BrowserTab: Sendable, Equatable, Codable {
-    public let browser: String
     public let title: String
     public let url: String
-    public let estimatedBytes: UInt64?
-    public let confidence: Confidence
 
-    public init(browser: String, title: String, url: String,
-                estimatedBytes: UInt64?, confidence: Confidence) {
-        self.browser = browser; self.title = title; self.url = url
-        self.estimatedBytes = estimatedBytes; self.confidence = confidence
+    public init(title: String, url: String) {
+        self.title = title; self.url = url
+    }
+}
+
+/// One running browser: its open tabs plus the MEASURED total memory of the
+/// browser's own processes (the sum of `ri_phys_footprint` — the same figure
+/// shown in TOP APPS). We do NOT estimate per-tab memory: no browser's
+/// automation API exposes it (the tab object carries only id/title/URL/loading),
+/// so the section reports a real per-browser total and lists the tabs underneath.
+///
+/// `totalFootprintBytes` is nil when the memory cannot be honestly attributed:
+/// Safari's WebKit content processes live in the system WebKit framework, are
+/// shared across all WebKit apps, and only fold into the "Safari" group under
+/// `--responsible-pid`. Until then their memory is not attributable to Safari.
+public struct BrowserMemory: Sendable, Equatable, Codable {
+    public let browser: String
+    public let totalFootprintBytes: UInt64?
+    public let processCount: Int
+    public let tabs: [BrowserTab]
+
+    public init(browser: String, totalFootprintBytes: UInt64?, processCount: Int, tabs: [BrowserTab]) {
+        self.browser = browser; self.totalFootprintBytes = totalFootprintBytes
+        self.processCount = processCount; self.tabs = tabs
     }
 }
 
@@ -99,19 +120,19 @@ public struct MemorySnapshot: Sendable, Equatable, Codable {
     /// from "could not read from top".
     public let compressedAvailable: Bool
     public let swapStatus: SectionStatus
-    public let topTabs: [BrowserTab]
+    public let browsers: [BrowserMemory]
     public let tabsStatus: SectionStatus
 
     public init(topApps: [AppGroup], appsStatus: SectionStatus, unreadableProcessCount: Int,
                 swap: SwapInfo?, compressedUsers: [CompressedMemoryEntry],
                 compressedUnreadableCount: Int = 0, compressedAvailable: Bool = true,
-                swapStatus: SectionStatus, topTabs: [BrowserTab], tabsStatus: SectionStatus) {
+                swapStatus: SectionStatus, browsers: [BrowserMemory], tabsStatus: SectionStatus) {
         self.topApps = topApps; self.appsStatus = appsStatus
         self.unreadableProcessCount = unreadableProcessCount
         self.swap = swap; self.compressedUsers = compressedUsers
         self.compressedUnreadableCount = compressedUnreadableCount
         self.compressedAvailable = compressedAvailable
         self.swapStatus = swapStatus
-        self.topTabs = topTabs; self.tabsStatus = tabsStatus
+        self.browsers = browsers; self.tabsStatus = tabsStatus
     }
 }
