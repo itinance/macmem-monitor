@@ -19,14 +19,22 @@ public struct ProcessSample: Sendable, Equatable, Codable {
     public let residentBytes: UInt64
     public let pageIns: UInt64
     public let isReadable: Bool
+    /// Absolute current working directory, best-effort. `nil` when unreadable (other
+    /// users' processes without sudo, or any error). Used to disambiguate CLI groups.
+    public let workingDirectory: String?
+    /// Raw process arguments after the executable path, space-joined and trimmed.
+    /// `nil` when unreadable or empty. For `make -j8 run-api` this is `-j8 run-api`.
+    public let commandLine: String?
 
     public init(pid: Int32, ppid: Int32, responsiblePID: Int32?, bundleID: String?,
                 name: String, executablePath: String?, footprintBytes: UInt64,
-                residentBytes: UInt64, pageIns: UInt64, isReadable: Bool) {
+                residentBytes: UInt64, pageIns: UInt64, isReadable: Bool,
+                workingDirectory: String? = nil, commandLine: String? = nil) {
         self.pid = pid; self.ppid = ppid; self.responsiblePID = responsiblePID
         self.bundleID = bundleID; self.name = name; self.executablePath = executablePath
         self.footprintBytes = footprintBytes; self.residentBytes = residentBytes
         self.pageIns = pageIns; self.isReadable = isReadable
+        self.workingDirectory = workingDirectory; self.commandLine = commandLine
     }
 }
 
