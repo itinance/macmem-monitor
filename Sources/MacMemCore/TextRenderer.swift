@@ -2,22 +2,25 @@ import Foundation
 
 public enum TextRenderer {
     // Column widths for fixed-width table layout.
-    // NAME_WIDTH: characters reserved for the app name (long names are truncated with "…").
-    private static let nameWidth = 30
+    // NAME_WIDTH_MAX: the TOP APPS name column auto-sizes to the longest shown label,
+    // capped here. Labels beyond the cap are middle-truncated (head + trailing token kept).
+    private static let nameWidthMax = 60
     // MEM_WIDTH: characters reserved for the right-aligned memory string (e.g. "  1.5 MB").
     private static let memWidth = 10
     // TAB_MEM_WIDTH: characters reserved for the tab memory field (includes "~" prefix and label).
     private static let tabMemWidth = 20
 
-    /// Left-aligns `s` in a field of exactly `width` characters.
-    /// Names longer than `width - 1` are truncated and get a trailing "…".
-    private static func nameColumn(_ s: String, width: Int = nameWidth) -> String {
-        if s.count <= width {
-            return s.padding(toLength: width, withPad: " ", startingAt: 0)
-        }
-        // Truncate to (width - 1) chars and append the ellipsis character.
-        let truncated = String(s.prefix(width - 1)) + "…"
-        return truncated
+    // `internal` (not `private`) so RendererTests can exercise it directly.
+    /// Truncates `s` to exactly `width` characters by removing the middle and inserting
+    /// an ellipsis, preserving the head (process name) and the tail (trailing argv token).
+    /// Strings already within `width` are returned unchanged.
+    static func middleTruncate(_ s: String, width: Int) -> String {
+        if s.count <= width { return s }
+        guard width >= 2 else { return String(s.prefix(max(0, width))) }
+        let budget = width - 1                 // room left after the ellipsis
+        let headLen = budget - budget / 2      // bias the head when budget is odd
+        let tailLen = budget / 2
+        return "\(s.prefix(headLen))…\(s.suffix(tailLen))"
     }
 
     /// Right-aligns `s` in a field of exactly `width` characters.
@@ -31,8 +34,10 @@ public enum TextRenderer {
 
         lines.append("== TOP APPS (by combined memory) ==")
         lines.append(statusNote(snap.appsStatus, unreadable: snap.unreadableProcessCount))
+        let nameFieldWidth = min(snap.topApps.map { $0.name.count }.max() ?? 0, nameWidthMax)
         for (i, app) in snap.topApps.enumerated() {
-            let name = nameColumn(app.name)
+            let label = middleTruncate(app.name, width: nameFieldWidth)
+            let name = label.padding(toLength: nameFieldWidth, withPad: " ", startingAt: 0)
             let mem  = memColumn(ByteFormat.string(app.totalFootprintBytes))
             lines.append(String(format: "%2d. %@  %@  (%d proc)", i + 1, name, mem, app.processCount))
         }
