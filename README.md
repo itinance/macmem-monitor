@@ -55,6 +55,7 @@ macmem --no-swap             # skip the swap section
 macmem --watch 2             # refresh every 2s
 macmem --responsible-pid     # use private API for better process→app grouping (off by default; may carry notarization considerations)
 macmem --browser "Safari"    # only query tabs from a single browser (Brave Browser, Google Chrome, Microsoft Edge, or Safari)
+macmem --full-paths          # show full working-directory paths in CLI process labels (default: shortest unique suffix)
 sudo macmem                  # include root-owned processes
 ```
 
