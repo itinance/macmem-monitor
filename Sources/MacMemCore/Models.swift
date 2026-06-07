@@ -1,9 +1,5 @@
 import Foundation
 
-public enum Confidence: String, Sendable, Codable, Equatable {
-    case high, medium, low
-}
-
 public enum SectionStatus: String, Sendable, Codable, Equatable {
     case ok, partial, permissionNeeded, error
 }
