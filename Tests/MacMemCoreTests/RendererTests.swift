@@ -13,8 +13,9 @@ final class RendererTests: XCTestCase {
                                                     compressedBytes: 536_870_912)],
             compressedUnreadableCount: 3,
             swapStatus: .ok,
-            topTabs: [BrowserTab(browser: "Brave Browser", title: "Example",
-                                 url: "https://example.com", estimatedBytes: 1_048_576, confidence: .low)],
+            browsers: [BrowserMemory(browser: "Brave Browser", totalFootprintBytes: 1_048_576,
+                                     processCount: 3,
+                                     tabs: [BrowserTab(title: "Example", url: "https://example.com")])],
             tabsStatus: .ok)
     }
 
@@ -41,22 +42,65 @@ final class RendererTests: XCTestCase {
                       "coverage footer should appear when compressedUnreadableCount > 0")
         XCTAssertFalse(out.lowercased().contains("sudo"),
                        "compressed section footer must not mention sudo")
-        // FINDING 4: confidence label must appear on estimated tab rows
-        XCTAssertTrue(out.contains("[low]"),
-                      "estimated tab rows should carry a [low] confidence label")
+        // The per-browser subheader shows a MEASURED total and carries the [measured] marker.
+        XCTAssertTrue(out.contains("across 3 processes"),
+                      "browser subheader should show the measured process count")
+        XCTAssertFalse(out.contains("(n/a)"),
+                       "the fake per-tab estimate column must be gone")
+        XCTAssertFalse(out.contains("~"),
+                       "no estimate tilde anywhere — tabs show no per-tab memory")
     }
 
-    // FINDING 4: tab rows with no estimate must NOT carry a confidence label
-    func testTabRowWithNoEstimateHasNoConfidenceLabel() {
+    // A browser whose memory is not attributable (e.g. Safari) shows an honest note,
+    // never a fabricated or misleadingly tiny number.
+    func testBrowserWithUnattributableMemoryShowsHonestNote() {
         let snap = MemorySnapshot(
             topApps: [], appsStatus: .ok, unreadableProcessCount: 0,
             swap: nil, compressedUsers: [], swapStatus: .ok,
-            topTabs: [BrowserTab(browser: "Brave Browser", title: "No Estimate",
-                                 url: "https://noest.com", estimatedBytes: nil, confidence: .low)],
+            browsers: [BrowserMemory(browser: "Safari", totalFootprintBytes: nil, processCount: 0,
+                                     tabs: [BrowserTab(title: "DI", url: "https://di.fm/")])],
             tabsStatus: .ok)
         let out = TextRenderer.render(snap)
-        XCTAssertFalse(out.contains("[low]"),
-                       "tab rows without an estimate should not carry a confidence label")
+        XCTAssertTrue(out.contains("https://di.fm/"), "tabs should still list when total is unavailable")
+        XCTAssertTrue(out.contains("not separately attributable"),
+                      "unattributable browser memory must be stated honestly")
+        XCTAssertTrue(out.contains("--responsible-pid"),
+                      "the note should point the user at the signal that fixes it")
+        XCTAssertFalse(out.contains("[measured]"),
+                       "no measured marker when there is no measured total")
+    }
+
+    // The per-browser subheader prints the real measured total + process count.
+    func testBrowserTabsShowsMeasuredPerBrowserTotal() {
+        let snap = MemorySnapshot(
+            topApps: [], appsStatus: .ok, unreadableProcessCount: 0,
+            swap: nil, compressedUsers: [], swapStatus: .ok,
+            browsers: [BrowserMemory(browser: "Brave Browser", totalFootprintBytes: 12_884_901_888,
+                                     processCount: 41,
+                                     tabs: [BrowserTab(title: "BP", url: "https://beatport.com/")])],
+            tabsStatus: .ok)
+        let out = TextRenderer.render(snap)
+        XCTAssertTrue(out.contains("Brave Browser — 12.0 GB across 41 processes"),
+                      "subheader must show the measured total and process count")
+        XCTAssertTrue(out.contains("[measured]"), "measured total carries the [measured] marker")
+        XCTAssertTrue(out.contains("https://beatport.com/"), "tabs list under the subheader")
+    }
+
+    // The tab list is capped at tabsPerBrowser; the remainder is reported honestly,
+    // and the subheader still shows the TRUE total tab count.
+    func testTabListIsCappedWithHonestRemainder() {
+        let tabs = (0..<25).map { BrowserTab(title: "t\($0)", url: "https://e.com/\($0)") }
+        let snap = MemorySnapshot(
+            topApps: [], appsStatus: .ok, unreadableProcessCount: 0,
+            swap: nil, compressedUsers: [], swapStatus: .ok,
+            browsers: [BrowserMemory(browser: "Brave Browser", totalFootprintBytes: 1024,
+                                     processCount: 3, tabs: tabs)],
+            tabsStatus: .ok)
+        let out = TextRenderer.render(snap, tabsPerBrowser: 10)
+        XCTAssertTrue(out.contains("· 25 tabs"), "subheader shows the true tab count")
+        XCTAssertTrue(out.contains("https://e.com/9"), "first 10 tabs are listed")
+        XCTAssertFalse(out.contains("https://e.com/10"), "tabs beyond the cap are not listed")
+        XCTAssertTrue(out.contains("(+15 more)"), "the remainder is reported, not silently dropped")
     }
 
     // FINDING 7: partial message for tabs section must not mention "sudo" or unreadable counts
@@ -64,7 +108,7 @@ final class RendererTests: XCTestCase {
         let snap = MemorySnapshot(
             topApps: [], appsStatus: .ok, unreadableProcessCount: 0,
             swap: nil, compressedUsers: [], swapStatus: .ok,
-            topTabs: [], tabsStatus: .partial)
+            browsers: [], tabsStatus: .partial)
         let out = TextRenderer.render(snap)
         XCTAssertTrue(out.contains("partial"), "tabs partial status should say 'partial'")
         XCTAssertFalse(out.lowercased().contains("sudo"),
@@ -78,7 +122,7 @@ final class RendererTests: XCTestCase {
         let snap = MemorySnapshot(
             topApps: [], appsStatus: .partial, unreadableProcessCount: 3,
             swap: nil, compressedUsers: [], swapStatus: .ok,
-            topTabs: [], tabsStatus: .ok)
+            browsers: [], tabsStatus: .ok)
         let out = TextRenderer.render(snap)
         XCTAssertTrue(out.lowercased().contains("sudo"),
                       "apps partial message should mention sudo")
@@ -91,8 +135,8 @@ final class RendererTests: XCTestCase {
         let snap = MemorySnapshot(
             topApps: [], appsStatus: .ok, unreadableProcessCount: 0,
             swap: nil, compressedUsers: [], swapStatus: .ok,
-            topTabs: [BrowserTab(browser: "Brave Browser", title: "Loaded Page",
-                                 url: "https://loaded.com", estimatedBytes: nil, confidence: .low)],
+            browsers: [BrowserMemory(browser: "Brave Browser", totalFootprintBytes: 100, processCount: 1,
+                                     tabs: [BrowserTab(title: "Loaded Page", url: "https://loaded.com")])],
             tabsStatus: .partial)
         let out = TextRenderer.render(snap)
         XCTAssertTrue(out.contains("https://loaded.com"),
@@ -115,7 +159,7 @@ final class RendererTests: XCTestCase {
             ],
             appsStatus: .ok, unreadableProcessCount: 0,
             swap: nil, compressedUsers: [], swapStatus: .ok,
-            topTabs: [], tabsStatus: .ok)
+            browsers: [], tabsStatus: .ok)
         let out = TextRenderer.render(snap)
         let lines = out.split(separator: "\n", omittingEmptySubsequences: false)
         // Find the two app rows (they follow "== TOP APPS ==")
@@ -169,7 +213,7 @@ final class RendererTests: XCTestCase {
             swap: SwapInfo(totalBytes: 1_073_741_824, usedBytes: 536_870_912,
                            freeBytes: 536_870_912, swapIns: 0, swapOuts: 0),
             compressedUsers: [], compressedAvailable: false,
-            swapStatus: .ok, topTabs: [], tabsStatus: .ok)
+            swapStatus: .ok, browsers: [], tabsStatus: .ok)
         let out = TextRenderer.render(snap)
         XCTAssertTrue(out.contains("unavailable (could not read from top)"),
                       "top failure should render as unavailable, not none measured")
@@ -220,7 +264,7 @@ final class RendererTests: XCTestCase {
             ],
             appsStatus: .ok, unreadableProcessCount: 0,
             swap: nil, compressedUsers: [], swapStatus: .ok,
-            topTabs: [], tabsStatus: .ok)
+            browsers: [], tabsStatus: .ok)
         let out = TextRenderer.render(snap)
         // The shorter, under-cap label renders in full.
         XCTAssertTrue(out.contains("node — svc/api (index.js)"))
