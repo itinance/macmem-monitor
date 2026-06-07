@@ -15,7 +15,8 @@ public struct SnapshotBuilder {
         self.knownBrowsers = knownBrowsers
     }
 
-    public func build(topN: Int = 10, includeTabs: Bool = true, includeSwap: Bool = true) -> MemorySnapshot {
+    public func build(topN: Int = 10, includeTabs: Bool = true, includeSwap: Bool = true,
+                      pathStyle: PathStyle = .shortestUnique) -> MemorySnapshot {
         // --- Apps section ---
         var topApps: [AppGroup] = []
         var appsStatus: SectionStatus = .ok
@@ -24,7 +25,8 @@ public struct SnapshotBuilder {
         do {
             samples = try provider.listProcesses()
             unreadable = samples.filter { !$0.isReadable }.count
-            topApps = AppGrouper().group(samples.filter { $0.isReadable }, topN: topN)
+            topApps = AppGrouper().group(samples.filter { $0.isReadable }, topN: topN,
+                                         pathStyle: pathStyle)
             appsStatus = unreadable > 0 ? .partial : .ok
         } catch {
             appsStatus = .error
