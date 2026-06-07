@@ -30,6 +30,9 @@ struct Macmem: ParsableCommand {
     @Option(name: .long, help: "Only read tabs from this browser (Brave Browser, Google Chrome, Microsoft Edge, or Safari).")
     var browser: String?
 
+    @Flag(name: .long, help: "Show full working-directory paths in CLI process labels instead of the shortest unique suffix.")
+    var fullPaths = false
+
     func validate() throws {
         if top < 0 {
             throw ValidationError("--top must be >= 0.")
@@ -67,7 +70,8 @@ struct Macmem: ParsableCommand {
             tabSource = AppleScriptTabSource()
         }
         let snapshot = SnapshotBuilder(provider: provider, tabSource: tabSource)
-            .build(topN: top, includeTabs: !noTabs, includeSwap: !noSwap)
+            .build(topN: top, includeTabs: !noTabs, includeSwap: !noSwap,
+                   pathStyle: fullPaths ? .fullPath : .shortestUnique)
 
         var renderExitCode: Int32 = 0
         if json {
@@ -78,7 +82,8 @@ struct Macmem: ParsableCommand {
                 renderExitCode = 1
             }
         } else {
-            print(TextRenderer.render(snapshot, includeSwap: !noSwap, includeTabs: !noTabs))
+            print(TextRenderer.render(snapshot, includeSwap: !noSwap, includeTabs: !noTabs,
+                                      tabsPerBrowser: top))
         }
 
         printPrivilegeHintIfNeeded(snapshot)

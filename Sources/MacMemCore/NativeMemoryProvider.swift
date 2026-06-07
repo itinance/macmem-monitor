@@ -18,19 +18,47 @@ public struct NativeMemoryProvider: MemoryProvider {
             guard pid > 0 else { return nil }
             let path = Self.path(for: pid)
             let parentPID = Self.ppid(for: pid)
-            let name = appIdentity[pid]?.name ?? Self.name(for: pid, fallbackPath: path)
-            let bundleID = appIdentity[pid]?.bundleID ?? Self.bundleID(forPath: path)
+            // Attribute each process to its owning application:
+            //  1. A real, user-facing app (NSWorkspace activation policy `.regular`) is
+            //     trusted as itself — even when its binary lives inside another app's
+            //     bundle (e.g. Instruments.app nested in Xcode.app stays "Instruments").
+            //  2. Otherwise, a binary that lives *inside* an .app bundle is folded into the
+            //     OUTERMOST enclosing app: XPC services (iTerm2's `pidinfo`, Xcode's
+            //     `SourceKitService`), bundled tools (DataGrip's `java`), and browser child
+            //     processes (Firefox's `plugin-container` under Firefox.app) all read as
+            //     their owning app instead of a generic executable / sub-bundle name.
+            //  3. A background process not inside any .app (e.g. the system-shared WebKit
+            //     XPC services Safari uses, which live in /System/Library/Frameworks) keeps
+            //     its LaunchServices label — we can't honestly attribute it to one app
+            //     without the responsible-PID signal (see ResponsiblePID / --responsible-pid).
+            let identity = appIdentity[pid]
+            let enclosing = Self.appBundle(forPath: path)
+            let name: String
+            let bundleID: String?
+            if let identity, identity.isRegular {
+                (bundleID, name) = (identity.bundleID, identity.name)
+            } else if let enclosing, let encID = enclosing.bundleID {
+                (bundleID, name) = (encID, enclosing.name)
+            } else if let identity {
+                (bundleID, name) = (identity.bundleID, identity.name)
+            } else {
+                (bundleID, name) = (nil, Self.name(for: pid, fallbackPath: path))
+            }
+            let cwd = Self.workingDirectory(for: pid)
+            let cmd = Self.commandLine(for: pid)
 
             if let usage = Self.rusage(for: pid) {
                 return ProcessSample(pid: pid, ppid: parentPID, responsiblePID: ResponsiblePID.lookup(for: pid, enabled: useResponsiblePID),
                                      bundleID: bundleID, name: name, executablePath: path,
                                      footprintBytes: usage.footprint, residentBytes: usage.resident,
-                                     pageIns: usage.pageIns, isReadable: true)
+                                     pageIns: usage.pageIns, isReadable: true,
+                                     workingDirectory: cwd, commandLine: cmd)
             } else {
                 // Not owned by us / not permitted: still list it, marked unreadable.
                 return ProcessSample(pid: pid, ppid: parentPID, responsiblePID: ResponsiblePID.lookup(for: pid, enabled: useResponsiblePID),
                                      bundleID: bundleID, name: name, executablePath: path,
-                                     footprintBytes: 0, residentBytes: 0, pageIns: 0, isReadable: false)
+                                     footprintBytes: 0, residentBytes: 0, pageIns: 0, isReadable: false,
+                                     workingDirectory: cwd, commandLine: cmd)
             }
         }
     }
@@ -87,6 +115,76 @@ public struct NativeMemoryProvider: MemoryProvider {
         return rc > 0 ? String(cString: buffer) : nil
     }
 
+    // PROC_PIDVNODEPATHINFO == 9 (sys/proc_info.h). Hardcoded for the same macOS-26 Swift
+    // overlay reason documented above for PROC_PIDPATHINFO_MAXSIZE.
+    private static let procPIDVnodePathInfo: Int32 = 9
+
+    /// Best-effort current working directory for `pid`. Readable for processes owned by the
+    /// current user (or any process when running as root); `nil` otherwise or on any error.
+    private static func workingDirectory(for pid: pid_t) -> String? {
+        var info = proc_vnodepathinfo()
+        let size = Int32(MemoryLayout<proc_vnodepathinfo>.size)
+        let rc = proc_pidinfo(pid, procPIDVnodePathInfo, 0, &info, size)
+        guard rc == size else { return nil }
+        var cdir = info.pvi_cdir.vip_path
+        let path = withUnsafeBytes(of: &cdir) { raw -> String in
+            guard let base = raw.baseAddress else { return "" }
+            return String(cString: base.assumingMemoryBound(to: CChar.self))
+        }
+        return path.isEmpty ? nil : path
+    }
+
+    // KERN_PROCARGS2 == 49 (sys/sysctl.h). Hardcoded for the same macOS-26 overlay reason.
+    private static let kernProcArgs2: Int32 = 49
+
+    /// Best-effort process arguments after the executable path, space-joined and trimmed.
+    /// Reads the KERN_PROCARGS2 blob: [int argc][exec_path NUL][argv0 NUL]...[argv NUL]...
+    /// Returns `nil` when unreadable (other users' processes) or when there are no args.
+    private static func commandLine(for pid: pid_t) -> String? {
+        var mib: [Int32] = [CTL_KERN, kernProcArgs2, pid]
+        var size = 0
+        guard sysctl(&mib, 3, nil, &size, nil, 0) == 0, size > MemoryLayout<Int32>.size else {
+            return nil
+        }
+        var buffer = [UInt8](repeating: 0, count: size)
+        guard sysctl(&mib, 3, &buffer, &size, nil, 0) == 0, size > MemoryLayout<Int32>.size else {
+            return nil
+        }
+
+        var argc: Int32 = 0
+        withUnsafeMutableBytes(of: &argc) {
+            $0.copyBytes(from: buffer[0..<MemoryLayout<Int32>.size])
+        }
+        guard argc > 0 else { return nil }
+
+        var index = MemoryLayout<Int32>.size
+        // Skip the executable path string.
+        while index < size && buffer[index] != 0 { index += 1 }
+        // Skip the NUL padding between exec path and argv[0].
+        while index < size && buffer[index] == 0 { index += 1 }
+
+        // Read argc NUL-terminated argument strings.
+        var args: [String] = []
+        var current: [UInt8] = []
+        while index < size && args.count < Int(argc) {
+            let byte = buffer[index]
+            if byte == 0 {
+                args.append(String(decoding: current, as: UTF8.self))
+                current.removeAll(keepingCapacity: true)
+            } else {
+                current.append(byte)
+            }
+            index += 1
+        }
+        // A partial final arg (blob ended mid-string, no trailing NUL) is intentionally dropped.
+
+        guard !args.isEmpty else { return nil }
+        // args[0] is argv[0] (the command as invoked); the label wants everything after it.
+        let rest = args.dropFirst().joined(separator: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return rest.isEmpty ? nil : rest
+    }
+
     private static func name(for pid: pid_t, fallbackPath: String?) -> String {
         var buffer = [CChar](repeating: 0, count: Int(2 * MAXCOMLEN))
         let rc = proc_name(pid, &buffer, UInt32(buffer.count))
@@ -95,24 +193,34 @@ public struct NativeMemoryProvider: MemoryProvider {
         return "pid \(pid)"
     }
 
-    private static func bundleID(forPath path: String?) -> String? {
+    /// Walks `path` up to the OUTERMOST enclosing `.app` and returns its bundle identifier
+    /// together with its user-facing display name (CFBundleDisplayName › CFBundleName › the
+    /// `.app` folder name). Outermost (not innermost) so a child process nested several
+    /// bundles deep — `Firefox.app/.../plugin-container.app/.../plugin-container` — is
+    /// attributed to the top-level app (Firefox) rather than the inner sub-bundle. Lets
+    /// helpers/XPC services that are not themselves GUI apps be attributed *and labeled*
+    /// with their owning app. Returns `nil` when `path` is not inside any `.app`.
+    private static func appBundle(forPath path: String?) -> (bundleID: String?, name: String)? {
         guard let path else { return nil }
-        // Walk up to the enclosing .app, read its Info.plist bundle id.
         var url = URL(fileURLWithPath: path)
+        var outermost: URL?
         while url.pathComponents.count > 1 {
-            if url.pathExtension == "app" {
-                return Bundle(url: url)?.bundleIdentifier
-            }
+            if url.pathExtension == "app" { outermost = url }
             url.deleteLastPathComponent()
         }
-        return nil
+        guard let appURL = outermost else { return nil }
+        let bundle = Bundle(url: appURL)
+        let name = (bundle?.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String)
+            ?? (bundle?.object(forInfoDictionaryKey: "CFBundleName") as? String)
+            ?? appURL.deletingPathExtension().lastPathComponent
+        return (bundle?.bundleIdentifier, name)
     }
 
     /// Map of pid → (bundleID, localizedName) for GUI applications via NSWorkspace.
     /// NSWorkspace is main-thread-affined, so hop to main when called off-main.
     /// Interim approach — migrate to @MainActor isolation once the protocol and
     /// callers support async/actor contexts.
-    private static func appIdentityByPID() -> [pid_t: (bundleID: String?, name: String)] {
+    private static func appIdentityByPID() -> [pid_t: (bundleID: String?, name: String, isRegular: Bool)] {
         if Thread.isMainThread {
             return collectAppIdentity()
         } else {
@@ -120,12 +228,15 @@ public struct NativeMemoryProvider: MemoryProvider {
         }
     }
 
-    private static func collectAppIdentity() -> [pid_t: (bundleID: String?, name: String)] {
-        var map: [pid_t: (String?, String)] = [:]
+    private static func collectAppIdentity() -> [pid_t: (bundleID: String?, name: String, isRegular: Bool)] {
+        var map: [pid_t: (String?, String, Bool)] = [:]
         for app in NSWorkspace.shared.runningApplications {
             let pid = app.processIdentifier
             guard pid > 0 else { continue }
-            map[pid] = (app.bundleIdentifier, app.localizedName ?? "pid \(pid)")
+            // `.regular` == a real, user-facing app (Dock presence). Background helpers and
+            // child processes (.accessory/.prohibited) are foldable into their owning app.
+            map[pid] = (app.bundleIdentifier, app.localizedName ?? "pid \(pid)",
+                        app.activationPolicy == .regular)
         }
         return map
     }

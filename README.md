@@ -55,11 +55,44 @@ macmem --no-swap             # skip the swap section
 macmem --watch 2             # refresh every 2s
 macmem --responsible-pid     # use private API for better process→app grouping (off by default; may carry notarization considerations)
 macmem --browser "Safari"    # only query tabs from a single browser (Brave Browser, Google Chrome, Microsoft Edge, or Safari)
+macmem --full-paths          # show full working-directory paths in CLI process labels (default: shortest unique suffix)
 sudo macmem                  # include root-owned processes
 ```
 
 The first run prompts for **Automation** access per browser (needed to read tab URLs).
 For full process coverage including system/root processes, run with `sudo`.
+
+## Development
+
+A [`just`](https://github.com/casey/just) task runner wraps the common workflows.
+Run `just` with no arguments to list every recipe.
+
+```bash
+# Build & test
+just build              # debug build
+just release            # optimized release build
+just test               # full XCTest suite
+just test-summary       # run tests, print only the pass/fail line
+just test-one <filter>  # run a single test/case, e.g. just test-one AppGrouper
+just clean              # remove build artifacts
+
+# Run (extra args forward to the CLI)
+just run --top 5 --no-tabs   # run macmem with flags
+just help                    # macmem --help
+just json                    # full snapshot as JSON
+just top                     # quick glance: top 5 apps, no tabs/swap
+just watch 1                 # live-refreshing view, 1s interval
+just sudo-run                # release build, run under sudo (full process coverage)
+
+# Distribution
+just install            # build release + copy binary to {{prefix}}/bin (default /usr/local)
+just prefix=~/.local install   # install to a custom prefix
+just uninstall          # remove an installed binary
+just bin-path           # print the resolved release binary path
+
+# Meta
+just ci                 # mirror CI: clean release build + full test suite
+```
 
 ## License
 

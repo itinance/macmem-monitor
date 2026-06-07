@@ -3,10 +3,12 @@ import XCTest
 
 final class AppGrouperTests: XCTestCase {
     private func sample(_ pid: Int32, name: String, bundle: String?, footprint: UInt64,
-                        responsible: Int32? = nil, ppid: Int32 = 0) -> ProcessSample {
+                        responsible: Int32? = nil, ppid: Int32 = 0,
+                        cwd: String? = nil, cmd: String? = nil) -> ProcessSample {
         ProcessSample(pid: pid, ppid: ppid, responsiblePID: responsible, bundleID: bundle,
                       name: name, executablePath: nil, footprintBytes: footprint,
-                      residentBytes: footprint, pageIns: 0, isReadable: true)
+                      residentBytes: footprint, pageIns: 0, isReadable: true,
+                      workingDirectory: cwd, commandLine: cmd)
     }
 
     func testHelpersCollapseViaBundleSuffixStripping() {
@@ -76,7 +78,7 @@ final class AppGrouperTests: XCTestCase {
         ]
         let groups = AppGrouper().group(samples, topN: 10)
         XCTAssertEqual(groups.count, 1)
-        XCTAssertEqual(groups[0].name, "somecli")
+        XCTAssertTrue(groups[0].name.hasPrefix("somecli"), "bare name preserved in collapsed label")
         XCTAssertNil(groups[0].bundleID)
     }
 
@@ -88,7 +90,7 @@ final class AppGrouperTests: XCTestCase {
         ]
         let groups = AppGrouper().group(samples, topN: 10)
         XCTAssertEqual(groups.count, 1)
-        XCTAssertEqual(groups[0].name, "helper")
+        XCTAssertTrue(groups[0].name.hasPrefix("helper"), "bare name preserved in collapsed label")
         XCTAssertNil(groups[0].bundleID)
     }
 
@@ -117,7 +119,8 @@ final class AppGrouperTests: XCTestCase {
         XCTAssertEqual(groupedTotal, inputTotal, "no process dropped or double-counted in PPID cycle")
         XCTAssertEqual(groups.count, 2, "both bundle-less cycle members stay as separate groups")
         let names = groups.map { $0.name }.sorted()
-        XCTAssertEqual(names, ["cycleA", "cycleB"])
+        XCTAssertTrue(names[0].hasPrefix("cycleA"))
+        XCTAssertTrue(names[1].hasPrefix("cycleB"))
     }
 
     // Fix 1 (Critical): negative topN must not trap — must return empty array.
@@ -148,9 +151,64 @@ final class AppGrouperTests: XCTestCase {
         XCTAssertNotNil(ghosttyGroup)
         XCTAssertEqual(ghosttyGroup?.totalFootprintBytes, 230, "Ghostty + zsh = 230")
         XCTAssertEqual(ghosttyGroup?.processCount, 2)
-        let swiftGroup = byName["swift-build"]
+        let swiftGroup = groups.first { $0.name.hasPrefix("swift-build") }
         XCTAssertNotNil(swiftGroup)
         XCTAssertEqual(swiftGroup?.totalFootprintBytes, 150)
         XCTAssertEqual(swiftGroup?.processCount, 1)
+    }
+
+    // Same name + different cwd → separate, directory-labeled groups.
+    func testBundlelessSameNameDifferentCwdSplits() {
+        let samples = [
+            sample(1, name: "make", bundle: nil, footprint: 100, ppid: 1,
+                   cwd: "/Users/me/hotfix/apps/backend", cmd: "run-api"),
+            sample(2, name: "make", bundle: nil, footprint: 200, ppid: 1,
+                   cwd: "/Users/me/uitweaks/apps/backend", cmd: "worker"),
+        ]
+        let groups = AppGrouper().group(samples, topN: 10)
+        XCTAssertEqual(groups.count, 2, "different cwd → separate groups")
+        let names = Set(groups.map { $0.name })
+        XCTAssertTrue(names.contains("make — hotfix/apps/backend (run-api)"))
+        XCTAssertTrue(names.contains("make — uitweaks/apps/backend (worker)"))
+    }
+
+    // Same name + same cwd → one merged group; representative argv = highest footprint.
+    func testBundlelessSameNameSameCwdMerges() {
+        let samples = [
+            sample(1, name: "make", bundle: nil, footprint: 50, ppid: 1,
+                   cwd: "/Users/me/proj/backend", cmd: "small"),
+            sample(2, name: "make", bundle: nil, footprint: 500, ppid: 1,
+                   cwd: "/Users/me/proj/backend", cmd: "big"),
+        ]
+        let groups = AppGrouper().group(samples, topN: 10)
+        XCTAssertEqual(groups.count, 1, "same name + same cwd merges")
+        XCTAssertEqual(groups[0].totalFootprintBytes, 550)
+        XCTAssertEqual(groups[0].processCount, 2)
+        // Singleton cohort → last component; argv from the heavier process.
+        XCTAssertEqual(groups[0].name, "make — backend (big)")
+    }
+
+    // Bundle-less + nil cwd → single collapsed bare-name group.
+    func testBundlelessNilCwdCollapsesToBareName() {
+        let samples = [
+            sample(1, name: "make", bundle: nil, footprint: 10, ppid: 1),
+            sample(2, name: "make", bundle: nil, footprint: 20, ppid: 1),
+        ]
+        let groups = AppGrouper().group(samples, topN: 10)
+        XCTAssertEqual(groups.count, 1, "unreadable-cwd same-name processes collapse")
+        // Note: two spaces before "(" — collapsedLabel intentionally uses a double space.
+        XCTAssertEqual(groups[0].name, "make  (2 processes, dir unavailable)")
+        XCTAssertEqual(groups[0].totalFootprintBytes, 30)
+    }
+
+    // pathStyle: .fullPath produces ~-abbreviated labels regardless of uniqueness.
+    func testFullPathStyleProducesHomeAbbreviatedLabels() {
+        let samples = [
+            sample(1, name: "node", bundle: nil, footprint: 100, ppid: 1,
+                   cwd: "/Users/me/svc/api", cmd: "index.js"),
+        ]
+        let groups = AppGrouper().group(samples, topN: 10, pathStyle: .fullPath,
+                                        homeDirectory: "/Users/me")
+        XCTAssertEqual(groups[0].name, "node — ~/svc/api (index.js)")
     }
 }

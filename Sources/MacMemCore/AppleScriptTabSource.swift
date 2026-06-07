@@ -39,16 +39,24 @@ public struct AppleScriptTabSource: TabSource {
         !name.isEmpty && name.allSatisfy { $0.isLetter || $0.isNumber || $0 == " " || $0 == "." }
     }
 
-    // Output format: one tab per line as "windowIndex\ttabIndex\tURL\tTITLE"
-    private static func chromiumScript(app: String) -> String {
+    // Output format: one tab per line as "windowIndex\ttabIndex\tURL\tTITLE".
+    //
+    // The field delimiter is bound to `tab` OUTSIDE the `tell application` block, then
+    // referenced as `d` inside. This is required: within a `tell application "<browser>"`
+    // block the bare keyword `tab` resolves to the application's own `tab` *class*
+    // (a browser tab object), not the AppleScript tab character — so `& tab &` would
+    // concatenate the literal text "tab" and every line would be unparseable. Binding it
+    // outside the block captures the real ASCII-9 character. (`linefeed` is not shadowed.)
+    static func chromiumScript(app: String) -> String {
         """
+        set d to tab
         set out to ""
         tell application "\(app)"
             set wi to 0
             repeat with w in windows
                 set ti to 0
                 repeat with t in tabs of w
-                    set out to out & wi & tab & ti & tab & (URL of t) & tab & (title of t) & linefeed
+                    set out to out & wi & d & ti & d & (URL of t) & d & (title of t) & linefeed
                     set ti to ti + 1
                 end repeat
                 set wi to wi + 1
@@ -58,14 +66,15 @@ public struct AppleScriptTabSource: TabSource {
         """
     }
 
-    private static let safariScript = """
+    static let safariScript = """
+        set d to tab
         set out to ""
         tell application "Safari"
             set wi to 0
             repeat with w in windows
                 set ti to 0
                 repeat with t in tabs of w
-                    set out to out & wi & tab & ti & tab & (URL of t) & tab & (name of t) & linefeed
+                    set out to out & wi & d & ti & d & (URL of t) & d & (name of t) & linefeed
                     set ti to ti + 1
                 end repeat
                 set wi to wi + 1
