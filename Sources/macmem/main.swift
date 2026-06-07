@@ -82,7 +82,8 @@ struct Macmem: ParsableCommand {
                 renderExitCode = 1
             }
         } else {
-            print(TextRenderer.render(snapshot, includeSwap: !noSwap, includeTabs: !noTabs))
+            print(TextRenderer.render(snapshot, includeSwap: !noSwap, includeTabs: !noTabs,
+                                      tabsPerBrowser: top))
         }
 
         printPrivilegeHintIfNeeded(snapshot)

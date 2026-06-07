@@ -5,7 +5,7 @@ final class ExitCodeTests: XCTestCase {
     private func snap(apps: SectionStatus, swap: SectionStatus) -> MemorySnapshot {
         MemorySnapshot(topApps: [], appsStatus: apps, unreadableProcessCount: 0,
                        swap: nil, compressedUsers: [], swapStatus: swap,
-                       topTabs: [], tabsStatus: .ok)
+                       browsers: [], tabsStatus: .ok)
     }
 
     func testBothErrorSectionsExitsNonZero() {
@@ -31,7 +31,7 @@ final class ExitCodeTests: XCTestCase {
     func testTabsErrorAloneDoesNotAffectExitCode() {
         let s = MemorySnapshot(topApps: [], appsStatus: .ok, unreadableProcessCount: 0,
                                swap: nil, compressedUsers: [], swapStatus: .ok,
-                               topTabs: [], tabsStatus: .error)
+                               browsers: [], tabsStatus: .error)
         XCTAssertEqual(snapshotExitCode(s), 0)
     }
 }
@@ -47,8 +47,8 @@ final class ModelsTests: XCTestCase {
             compressedUsers: [CompressedMemoryEntry(appName: "Brave", bundleID: "com.brave.Browser",
                                                     compressedBytes: 40)],
             swapStatus: .ok,
-            topTabs: [BrowserTab(browser: "Brave", title: "Example", url: "https://example.com",
-                                 estimatedBytes: nil, confidence: .low)],
+            browsers: [BrowserMemory(browser: "Brave", totalFootprintBytes: nil, processCount: 0,
+                                     tabs: [BrowserTab(title: "Example", url: "https://example.com")])],
             tabsStatus: .partial
         )
         let data = try JSONEncoder().encode(snap)

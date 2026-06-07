@@ -7,8 +7,6 @@ public enum TextRenderer {
     private static let nameWidthMax = 60
     // MEM_WIDTH: characters reserved for the right-aligned memory string (e.g. "  1.5 MB").
     private static let memWidth = 10
-    // TAB_MEM_WIDTH: characters reserved for the tab memory field (includes "~" prefix and label).
-    private static let tabMemWidth = 20
 
     // `internal` (not `private`) so RendererTests can exercise it directly.
     /// Truncates `s` to exactly `width` characters by removing the middle and inserting
@@ -29,7 +27,8 @@ public enum TextRenderer {
         return String(repeating: " ", count: width - s.count) + s
     }
 
-    public static func render(_ snap: MemorySnapshot, includeSwap: Bool = true, includeTabs: Bool = true) -> String {
+    public static func render(_ snap: MemorySnapshot, includeSwap: Bool = true,
+                              includeTabs: Bool = true, tabsPerBrowser: Int = 10) -> String {
         var lines: [String] = []
 
         lines.append("== TOP APPS (by combined memory) ==")
@@ -73,21 +72,28 @@ public enum TextRenderer {
 
         if includeTabs {
             lines.append("")
-            lines.append("== BROWSER TABS (heaviest) ==")
-            // Always show the status note for non-ok states, even when some tabs were returned
-            // (e.g. partial: browser A succeeded, browser B failed — show what we got plus the note).
+            lines.append("== BROWSER TABS ==")
+            // Always show the status note for non-ok states, even when some browsers were
+            // returned (e.g. partial: browser A succeeded, browser B failed).
             if snap.tabsStatus != .ok {
                 lines.append(tabsStatusNote(snap.tabsStatus))
             }
-            for (i, tab) in snap.topTabs.enumerated() {
-                if let bytes = tab.estimatedBytes {
-                    // Carry the confidence label on estimated rows (spec: every estimate has a marker)
-                    let mem = memColumn("~\(ByteFormat.string(bytes)) [\(tab.confidence.rawValue)]",
-                                        width: tabMemWidth)
-                    lines.append(String(format: "%2d. %@  %@", i + 1, mem, tab.url))
-                } else {
-                    let mem = memColumn("(n/a)", width: tabMemWidth)
-                    lines.append(String(format: "%2d. %@  %@", i + 1, mem, tab.url))
+            if snap.browsers.isEmpty && snap.tabsStatus == .ok {
+                lines.append("(no supported browser running)")
+            }
+            // One block per browser: a measured per-browser total subheader, then its tabs.
+            // No per-tab memory is shown — it cannot be measured (see BrowserMemory).
+            // The list is capped at tabsPerBrowser (the true count is in the subheader);
+            // any remainder is reported honestly rather than silently dropped.
+            let tabLimit = max(0, tabsPerBrowser)
+            for b in snap.browsers {
+                lines.append("")
+                lines.append(browserHeader(b))
+                for tab in b.tabs.prefix(tabLimit) {
+                    lines.append("   \(tab.url)")
+                }
+                if b.tabs.count > tabLimit {
+                    lines.append("   (+\(b.tabs.count - tabLimit) more)")
                 }
             }
         }
@@ -102,6 +108,19 @@ public enum TextRenderer {
         case .permissionNeeded: return "(permission needed — grant Automation access to read browser tabs)"
         case .error: return "(unavailable — failed to read this section)"
         }
+    }
+
+    /// Per-browser subheader: a MEASURED total + process count + tab count when the
+    /// memory is attributable, or an honest note when it is not (Safari without
+    /// `--responsible-pid` — see `BrowserMemory`).
+    private static func browserHeader(_ b: BrowserMemory) -> String {
+        let tabCount = "\(b.tabs.count) tab\(b.tabs.count == 1 ? "" : "s")"
+        if let bytes = b.totalFootprintBytes {
+            let procCount = "\(b.processCount) process\(b.processCount == 1 ? "" : "es")"
+            return "\(b.browser) — \(ByteFormat.string(bytes)) across \(procCount) · \(tabCount) [measured]"
+        }
+        return "\(b.browser) — \(tabCount); content memory not separately attributable "
+            + "(WebKit processes are system-shared — use --responsible-pid)"
     }
 
     /// FINDING 7: tabs-section-specific status note — AppleScript/TCC errors have nothing

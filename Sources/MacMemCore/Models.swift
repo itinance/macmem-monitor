@@ -82,16 +82,33 @@ public struct CompressedMemoryEntry: Sendable, Equatable, Codable {
 }
 
 public struct BrowserTab: Sendable, Equatable, Codable {
-    public let browser: String
     public let title: String
     public let url: String
-    public let estimatedBytes: UInt64?
-    public let confidence: Confidence
 
-    public init(browser: String, title: String, url: String,
-                estimatedBytes: UInt64?, confidence: Confidence) {
-        self.browser = browser; self.title = title; self.url = url
-        self.estimatedBytes = estimatedBytes; self.confidence = confidence
+    public init(title: String, url: String) {
+        self.title = title; self.url = url
+    }
+}
+
+/// One running browser: its open tabs plus the MEASURED total memory of the
+/// browser's own processes (the sum of `ri_phys_footprint` — the same figure
+/// shown in TOP APPS). We do NOT estimate per-tab memory: no browser's
+/// automation API exposes it (the tab object carries only id/title/URL/loading),
+/// so the section reports a real per-browser total and lists the tabs underneath.
+///
+/// `totalFootprintBytes` is nil when the memory cannot be honestly attributed:
+/// Safari's WebKit content processes live in the system WebKit framework, are
+/// shared across all WebKit apps, and only fold into the "Safari" group under
+/// `--responsible-pid`. Until then their memory is not attributable to Safari.
+public struct BrowserMemory: Sendable, Equatable, Codable {
+    public let browser: String
+    public let totalFootprintBytes: UInt64?
+    public let processCount: Int
+    public let tabs: [BrowserTab]
+
+    public init(browser: String, totalFootprintBytes: UInt64?, processCount: Int, tabs: [BrowserTab]) {
+        self.browser = browser; self.totalFootprintBytes = totalFootprintBytes
+        self.processCount = processCount; self.tabs = tabs
     }
 }
 
@@ -107,19 +124,19 @@ public struct MemorySnapshot: Sendable, Equatable, Codable {
     /// from "could not read from top".
     public let compressedAvailable: Bool
     public let swapStatus: SectionStatus
-    public let topTabs: [BrowserTab]
+    public let browsers: [BrowserMemory]
     public let tabsStatus: SectionStatus
 
     public init(topApps: [AppGroup], appsStatus: SectionStatus, unreadableProcessCount: Int,
                 swap: SwapInfo?, compressedUsers: [CompressedMemoryEntry],
                 compressedUnreadableCount: Int = 0, compressedAvailable: Bool = true,
-                swapStatus: SectionStatus, topTabs: [BrowserTab], tabsStatus: SectionStatus) {
+                swapStatus: SectionStatus, browsers: [BrowserMemory], tabsStatus: SectionStatus) {
         self.topApps = topApps; self.appsStatus = appsStatus
         self.unreadableProcessCount = unreadableProcessCount
         self.swap = swap; self.compressedUsers = compressedUsers
         self.compressedUnreadableCount = compressedUnreadableCount
         self.compressedAvailable = compressedAvailable
         self.swapStatus = swapStatus
-        self.topTabs = topTabs; self.tabsStatus = tabsStatus
+        self.browsers = browsers; self.tabsStatus = tabsStatus
     }
 }
