@@ -29,8 +29,15 @@ identity and label.
 - **Out of scope / unchanged:** processes **with** a bundle ID (Brave, Code, Safari,
   etc.) and the responsible-PID grouping path. They already group correctly and keep
   their current names.
-- Applies to **both** the TOP APPS section and the SWAP/compressed section, because
-  both render `AppGroup`s produced by `AppGrouper`.
+- Applies to **both** the TOP APPS section and the SWAP/compressed section. TOP APPS
+  renders `AppGroup` directly. The SWAP section renders `CompressedMemoryEntry`
+  (`Models.swift`), but the label still propagates: `CompressedMemoryAggregator.entries`
+  copies `group.name` into `entry.appName` from the already-labeled `topApps`. There is
+  therefore a **single labeling site** (`AppGrouper`); the aggregator inherits it.
+  Because the aggregator re-ranks and re-cuts `topApps` to its own `topN`, the
+  shortest-unique-suffix computation must run over the full bundle-less cohort *before*
+  any `topN` truncation (see Identity & Label Logic) so suffixes are stable in both
+  sections.
 
 ## Decisions (from brainstorming)
 
@@ -53,14 +60,30 @@ identity and label.
 - `workingDirectory: String?` — absolute cwd of the process. Read natively via
   `proc_pidinfo(pid, PROC_PIDVNODEPATHINFO, ...)`. Readable for processes owned by the
   current user; `nil` for other users' processes without sudo, and `nil` on any error.
-- `commandLine: String?` — the process arguments (everything after the executable
-  path), read natively via `sysctl(KERN_PROCARGS2)`. Used for the `(target)` suffix
-  (`run-api`, `worker-multi-2`). `nil` when unreadable. Leading/trailing whitespace
-  trimmed; collapsed to `nil` if empty.
+- `commandLine: String?` — the **full** process arguments (everything after the
+  executable path, joined with spaces), read natively via `sysctl(KERN_PROCARGS2)`.
+  This is raw argv: for `make -j8 run-api` it is `-j8 run-api`, so the label suffix is
+  `(-j8 run-api)`, **not** a cleaned `(run-api)`. We deliberately do not try to guess
+  the "target" — flag-stripping is fragile and project-specific. Whitespace-trimmed;
+  `nil` when unreadable or empty. Note the synergy with middle-truncation (see Renderer
+  Impact): when a label is too long, the trailing token — usually the most telling part,
+  e.g. the make target — is preserved.
 
 Both are populated in `NativeMemoryProvider`. `FakeMemoryProvider` lets tests supply
 them directly. Failure to read either field is non-fatal — the process still appears,
 just with less detail (honest degradation, consistent with the rest of the tool).
+
+**Source compatibility:** `ProcessSample.init` is a public memberwise initializer with
+no defaults (`Models.swift:23`), called twice in `NativeMemoryProvider` and across many
+tests. The two new parameters **must be declared with `= nil` defaults** so every
+existing call site compiles unchanged; only `NativeMemoryProvider` passes real values.
+
+**macOS 26 import friction (implementation note, not a spec change):**
+`NativeMemoryProvider.swift:79-82` already documents that `PROC_PIDPATHINFO_MAXSIZE` is
+not importable by the Swift overlay on macOS 26 and uses a hardcoded workaround. Expect
+the same friction for `PROC_PIDVNODEPATHINFO` / `proc_pidinfo` buffer sizing and for
+`KERN_PROCARGS2`; the implementer should budget for hardcoding the relevant constants or
+sizing buffers manually, following the existing pattern in that file.
 
 ## Identity & Label Logic
 
@@ -75,6 +98,10 @@ testable in isolation and `AppGrouper` stays an orchestrator:
   - Input: the set of distinct cwds within one same-name cohort.
   - Output: per cwd, the shortest trailing path-component suffix (min 1 component)
     that is unique across the cohort. A singleton cohort yields its last component.
+  - **Tiebreak:** if two distinct cwds share their entire shorter tail (one path's
+    components are a suffix of the other's, e.g. `/a/b/c` vs `/b/c`), no trailing
+    suffix can separate them. In that case both colliding entries fall back to their
+    full `$HOME`-abbreviated (`~/…`) path, guaranteeing the rendered rows are distinct.
 - `displayLabel(name:workingDirectory:commandLine:style:processCount:) -> String`
   - cwd present: `"\(name) — \(dir)\(target)"` where `dir` is the shortest-unique
     suffix (`style == .shortestUnique`) or the `~`-abbreviated full path
@@ -106,9 +133,26 @@ portion of bundle-less labels; it does not change grouping/identity.
 
 ## Renderer Impact
 
-No structural renderer change. TOP APPS continues to append its `(N proc)` count after
-the (now richer) `name`; the SWAP/compressed section prints the richer `name` as-is.
-Existing alignment logic is preserved; longer labels simply occupy more width.
+**TOP APPS truncation must change — this is required, not cosmetic.** Today
+`TextRenderer.nameColumn` (`TextRenderer.swift:14-21`) hard-truncates to
+`nameWidth = 30` via `prefix(width-1) + "…"`. That cuts the **tail** of the label —
+exactly the `(target)` and the deepest, most-disambiguating path components the feature
+adds. A label like `make — apps/backend (worker-multi-2)` would render as
+`make — apps/backend (worker-m…`, defeating the feature in the very section the Problem
+statement illustrates. The SWAP/compressed section already prints `appName` untruncated
+(`TextRenderer.swift:53-54`), so only TOP APPS needs fixing. Required changes:
+
+- **Auto-size the name column** to the longest label among the shown TOP APPS rows,
+  capped at a constant `nameWidthMax` (60). Rows pad to that width for alignment;
+  truncation happens only beyond the cap.
+- **Middle-truncate** when a label exceeds the cap: preserve the head and the trailing
+  token, e.g. `make — …/acme-hotfix/apps/backend (worker-multi-2)`. This keeps
+  both the process name and the trailing argv token (the make target) visible, and
+  composes with the raw-argv decision above.
+- The `(N proc)` count still follows the name as today; the SWAP section is unchanged.
+
+`nameColumn`'s signature gains the computed width; a new `middleTruncate(_:width:)`
+helper holds the ellipsis-in-the-middle logic and is unit-tested directly.
 
 ## Error Handling
 
@@ -119,8 +163,13 @@ Existing alignment logic is preserved; longer labels simply occupy more width.
 ## Testing
 
 - `ProcessLabelTests` (new): `groupKey` for the three cases; `shortestUniqueSuffixes`
-  for cohorts that collide at the tail (`.../apps/backend` × 2) and singletons;
-  `displayLabel` for shortestUnique vs fullPath vs collapsed-nil-cwd.
+  for cohorts that collide at the tail (`.../apps/backend` × 2) and singletons, **plus
+  the suffix-of-suffix tiebreak** (`/a/b/c` vs `/b/c` → both fall back to full `~`-path);
+  `displayLabel` for shortestUnique vs fullPath vs collapsed-nil-cwd; raw-argv suffix
+  (`-j8 run-api` renders verbatim, not cleaned).
+- `RendererTests` (extend): `middleTruncate` preserves head and trailing token; a
+  TOP APPS label over `nameWidthMax` is middle-truncated (trailing argv token survives);
+  the name column auto-sizes to the longest shown label up to the cap.
 - `AppGrouperTests` (extend): same name + different cwd → separate groups; same name +
   same cwd → merged; bundle-less + nil cwd → single collapsed bare-name group;
   bundle-ID groups unaffected; `pathStyle: .fullPath` produces `~`-abbreviated labels.
