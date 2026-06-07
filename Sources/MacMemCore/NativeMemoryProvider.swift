@@ -18,8 +18,14 @@ public struct NativeMemoryProvider: MemoryProvider {
             guard pid > 0 else { return nil }
             let path = Self.path(for: pid)
             let parentPID = Self.ppid(for: pid)
-            let name = appIdentity[pid]?.name ?? Self.name(for: pid, fallbackPath: path)
-            let bundleID = appIdentity[pid]?.bundleID ?? Self.bundleID(forPath: path)
+            // GUI apps come from NSWorkspace (localized name + bundle id). Everything else
+            // that lives *inside* an .app bundle — XPC services (iTerm2's `pidinfo`, Xcode's
+            // `SourceKitService`), a bundled JRE's `java`, etc. — is attributed to and
+            // labeled with its owning app rather than its generic executable name.
+            let identity = appIdentity[pid]
+            let enclosing = identity == nil ? Self.appBundle(forPath: path) : nil
+            let name = identity?.name ?? enclosing?.name ?? Self.name(for: pid, fallbackPath: path)
+            let bundleID = identity?.bundleID ?? enclosing?.bundleID
             let cwd = Self.workingDirectory(for: pid)
             let cmd = Self.commandLine(for: pid)
 
@@ -169,13 +175,21 @@ public struct NativeMemoryProvider: MemoryProvider {
         return "pid \(pid)"
     }
 
-    private static func bundleID(forPath path: String?) -> String? {
+    /// Walks up `path` to the enclosing `.app` and returns its bundle identifier together
+    /// with its user-facing display name (CFBundleDisplayName › CFBundleName › the `.app`
+    /// folder name). Lets binaries that live inside an app bundle but are not themselves
+    /// GUI apps be attributed *and labeled* with their owning app instead of a generic
+    /// executable name. Returns `nil` when `path` is not inside any `.app`.
+    private static func appBundle(forPath path: String?) -> (bundleID: String?, name: String)? {
         guard let path else { return nil }
-        // Walk up to the enclosing .app, read its Info.plist bundle id.
         var url = URL(fileURLWithPath: path)
         while url.pathComponents.count > 1 {
             if url.pathExtension == "app" {
-                return Bundle(url: url)?.bundleIdentifier
+                let bundle = Bundle(url: url)
+                let name = (bundle?.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String)
+                    ?? (bundle?.object(forInfoDictionaryKey: "CFBundleName") as? String)
+                    ?? url.deletingPathExtension().lastPathComponent
+                return (bundle?.bundleIdentifier, name)
             }
             url.deleteLastPathComponent()
         }
