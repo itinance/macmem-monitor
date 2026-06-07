@@ -5,10 +5,12 @@ private struct DummyError: Error {}
 
 final class SnapshotBuilderTests: XCTestCase {
     private func sample(_ pid: Int32, name: String, bundle: String?, footprint: UInt64,
-                        pageIns: UInt64 = 0, readable: Bool = true) -> ProcessSample {
+                        pageIns: UInt64 = 0, readable: Bool = true,
+                        cwd: String? = nil, cmd: String? = nil) -> ProcessSample {
         ProcessSample(pid: pid, ppid: 0, responsiblePID: nil, bundleID: bundle, name: name,
                       executablePath: nil, footprintBytes: footprint, residentBytes: footprint,
-                      pageIns: pageIns, isReadable: readable)
+                      pageIns: pageIns, isReadable: readable,
+                      workingDirectory: cwd, commandLine: cmd)
     }
 
     func testBuildsAllSectionsOK() {
@@ -156,5 +158,19 @@ final class SnapshotBuilderTests: XCTestCase {
 
         XCTAssertTrue(snap.topTabs.allSatisfy { $0.estimatedBytes == nil },
                       "estimates must be nil when renderer count != tab count")
+    }
+
+    func testPathStyleThreadsThroughToLabels() {
+        let provider = FakeMemoryProvider(
+            processes: [sample(1, name: "node", bundle: nil, footprint: 100,
+                               cwd: "/Users/me/svc/api", cmd: "index.js")],
+            swap: SwapInfo(totalBytes: 0, usedBytes: 0, freeBytes: 0, swapIns: 0, swapOuts: 0))
+        // Default style is shortestUnique: a singleton cohort shows its last component.
+        let def = SnapshotBuilder(provider: provider, tabSource: nil).build(includeSwap: false)
+        XCTAssertEqual(def.topApps.first?.name, "node — api (index.js)")
+        // .fullPath shows the full path (here unabbreviated — home differs from the test path).
+        let full = SnapshotBuilder(provider: provider, tabSource: nil)
+            .build(includeSwap: false, pathStyle: .fullPath)
+        XCTAssertEqual(full.topApps.first?.name, "node — /Users/me/svc/api (index.js)")
     }
 }
