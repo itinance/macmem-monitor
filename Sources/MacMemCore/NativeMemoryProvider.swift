@@ -20,17 +20,21 @@ public struct NativeMemoryProvider: MemoryProvider {
             let parentPID = Self.ppid(for: pid)
             let name = appIdentity[pid]?.name ?? Self.name(for: pid, fallbackPath: path)
             let bundleID = appIdentity[pid]?.bundleID ?? Self.bundleID(forPath: path)
+            let cwd = Self.workingDirectory(for: pid)
+            let cmd = Self.commandLine(for: pid)
 
             if let usage = Self.rusage(for: pid) {
                 return ProcessSample(pid: pid, ppid: parentPID, responsiblePID: ResponsiblePID.lookup(for: pid, enabled: useResponsiblePID),
                                      bundleID: bundleID, name: name, executablePath: path,
                                      footprintBytes: usage.footprint, residentBytes: usage.resident,
-                                     pageIns: usage.pageIns, isReadable: true)
+                                     pageIns: usage.pageIns, isReadable: true,
+                                     workingDirectory: cwd, commandLine: cmd)
             } else {
                 // Not owned by us / not permitted: still list it, marked unreadable.
                 return ProcessSample(pid: pid, ppid: parentPID, responsiblePID: ResponsiblePID.lookup(for: pid, enabled: useResponsiblePID),
                                      bundleID: bundleID, name: name, executablePath: path,
-                                     footprintBytes: 0, residentBytes: 0, pageIns: 0, isReadable: false)
+                                     footprintBytes: 0, residentBytes: 0, pageIns: 0, isReadable: false,
+                                     workingDirectory: cwd, commandLine: cmd)
             }
         }
     }
@@ -85,6 +89,76 @@ public struct NativeMemoryProvider: MemoryProvider {
         var buffer = [CChar](repeating: 0, count: pidPathInfoMaxSize)
         let rc = proc_pidpath(pid, &buffer, UInt32(buffer.count))
         return rc > 0 ? String(cString: buffer) : nil
+    }
+
+    // PROC_PIDVNODEPATHINFO == 9 (sys/proc_info.h). Hardcoded for the same macOS-26 Swift
+    // overlay reason documented above for PROC_PIDPATHINFO_MAXSIZE.
+    private static let procPIDVnodePathInfo: Int32 = 9
+
+    /// Best-effort current working directory for `pid`. Readable for processes owned by the
+    /// current user (or any process when running as root); `nil` otherwise or on any error.
+    private static func workingDirectory(for pid: pid_t) -> String? {
+        var info = proc_vnodepathinfo()
+        let size = Int32(MemoryLayout<proc_vnodepathinfo>.size)
+        let rc = proc_pidinfo(pid, procPIDVnodePathInfo, 0, &info, size)
+        guard rc == size else { return nil }
+        var cdir = info.pvi_cdir.vip_path
+        let path = withUnsafeBytes(of: &cdir) { raw -> String in
+            guard let base = raw.baseAddress else { return "" }
+            return String(cString: base.assumingMemoryBound(to: CChar.self))
+        }
+        return path.isEmpty ? nil : path
+    }
+
+    // KERN_PROCARGS2 == 49 (sys/sysctl.h). Hardcoded for the same macOS-26 overlay reason.
+    private static let kernProcArgs2: Int32 = 49
+
+    /// Best-effort process arguments after the executable path, space-joined and trimmed.
+    /// Reads the KERN_PROCARGS2 blob: [int argc][exec_path NUL][argv0 NUL]...[argv NUL]...
+    /// Returns `nil` when unreadable (other users' processes) or when there are no args.
+    private static func commandLine(for pid: pid_t) -> String? {
+        var mib: [Int32] = [CTL_KERN, kernProcArgs2, pid]
+        var size = 0
+        guard sysctl(&mib, 3, nil, &size, nil, 0) == 0, size > MemoryLayout<Int32>.size else {
+            return nil
+        }
+        var buffer = [UInt8](repeating: 0, count: size)
+        guard sysctl(&mib, 3, &buffer, &size, nil, 0) == 0, size > MemoryLayout<Int32>.size else {
+            return nil
+        }
+
+        var argc: Int32 = 0
+        withUnsafeMutableBytes(of: &argc) {
+            $0.copyBytes(from: buffer[0..<MemoryLayout<Int32>.size])
+        }
+        guard argc > 0 else { return nil }
+
+        var index = MemoryLayout<Int32>.size
+        // Skip the executable path string.
+        while index < size && buffer[index] != 0 { index += 1 }
+        // Skip the NUL padding between exec path and argv[0].
+        while index < size && buffer[index] == 0 { index += 1 }
+
+        // Read argc NUL-terminated argument strings.
+        var args: [String] = []
+        var current: [UInt8] = []
+        while index < size && args.count < Int(argc) {
+            let byte = buffer[index]
+            if byte == 0 {
+                args.append(String(decoding: current, as: UTF8.self))
+                current.removeAll(keepingCapacity: true)
+            } else {
+                current.append(byte)
+            }
+            index += 1
+        }
+        // A partial final arg (blob ended mid-string, no trailing NUL) is intentionally dropped.
+
+        guard !args.isEmpty else { return nil }
+        // args[0] is argv[0] (the command as invoked); the label wants everything after it.
+        let rest = args.dropFirst().joined(separator: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return rest.isEmpty ? nil : rest
     }
 
     private static func name(for pid: pid_t, fallbackPath: String?) -> String {
