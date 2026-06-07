@@ -4,11 +4,15 @@ A macOS CLI that shows where your memory is going:
 
 - **Top apps** by combined footprint (helper/renderer processes collapsed into their app).
 - **Swap** total plus the **measured** per-app compressed memory driving it (see below).
-- **Browser tabs** (Safari / Brave / Chrome / Edge) with URLs and best-effort per-tab estimates.
+- **Browser tabs** (Safari / Brave / Chrome / Edge): each browser's **measured** total
+  footprint and process count, with its open tab URLs listed underneath.
 
-> Per-tab memory is an **estimate** — macOS does not expose it directly. It is
-> always labeled with confidence and left blank when ambiguous. The per-app swap
-> contributors, by contrast, are **measured** compressed-memory values, not estimates.
+> Per-**tab** memory is not shown — no macOS or browser automation API exposes it.
+> Instead the section reports each browser's **measured** total footprint (the same
+> figure as TOP APPS) and lists its tabs. Safari's WebKit content is system-shared
+> and only attributable with `--responsible-pid`; until then Safari's total is shown
+> as unavailable rather than guessed. The per-app swap contributors are likewise
+> **measured** compressed-memory values, never estimates.
 
 ## Understanding compressed memory (CMPRS)
 
@@ -37,7 +41,25 @@ This data is read without `sudo` (`top` is entitled to report it for all process
 If `top` cannot be read at all, the section says *"unavailable (could not read from
 top)"* rather than silently showing nothing.
 
-## Install (from source)
+## Install
+
+### Homebrew (recommended)
+
+```bash
+brew install itinance/tap/macmem
+```
+
+Or tap first, then install by short name:
+
+```bash
+brew tap itinance/tap
+brew install macmem
+```
+
+Upgrade later with `brew upgrade macmem`. The formula builds from source, so a recent
+Xcode (15+) toolchain is required at install time.
+
+### From source
 
 ```bash
 swift build -c release
