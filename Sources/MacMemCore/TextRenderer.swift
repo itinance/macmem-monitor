@@ -54,12 +54,11 @@ public enum TextRenderer {
                     lines.append("   \(ByteFormat.string(c.compressedBytes))  \(c.appName)  [measured]")
                 }
                 if snap.compressedUnreadableCount > 0 {
-                    lines.append("   (\(snap.compressedUnreadableCount) accessible processes could not be measured; run with sudo for fuller coverage)")
+                    lines.append("   (\(snap.compressedUnreadableCount) processes could not be read from top)")
                 }
             } else if snap.swap != nil {
                 lines.append("")
-                lines.append("Compressed memory per app: none measured"
-                             + (snap.compressedUnreadableCount > 0 ? " (run with sudo to measure more)." : "."))
+                lines.append("Compressed memory per app: none measured.")
             }
         }
 

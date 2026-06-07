@@ -33,22 +33,20 @@ public struct SnapshotBuilder {
         // --- Swap totals + measured compressed memory ---
         var swap: SwapInfo?
         var compressedUsers: [CompressedMemoryEntry] = []
+        var compressedMissing = 0
         var swapStatus: SectionStatus = .ok
-        var compressedUnreadable = 0
         if includeSwap {
             do {
                 swap = try provider.readSwap()
             } catch {
                 swapStatus = .error
             }
-            // Compressed memory is meaningful even when used swap is 0 (the compressor
-            // holds compressed pages in RAM before any swap-out), so compute it regardless.
-            compressedUsers = CompressedMemoryAggregator().entries(groups: topApps, samples: samples, topN: topN)
-            // Accessible processes (rusage readable) whose compressed footprint we still
-            // couldn't measure because task_for_pid was denied — exactly the gap `sudo`
-            // closes. Excludes hardened daemons that are unreadable to any user, which
-            // would otherwise inflate this into a misleading count.
-            compressedUnreadable = samples.filter { $0.isReadable && $0.compressedBytes == nil }.count
+            let compressedMap = (try? provider.compressedByPID()) ?? [:]
+            compressedUsers = CompressedMemoryAggregator().entries(groups: topApps, compressedByPID: compressedMap, topN: topN)
+            // pids among the shown apps that top didn't report (transient races). If top
+            // failed entirely (empty map), count all shown pids so the renderer can flag it.
+            let shownPIDs = Set(topApps.flatMap { $0.pids })
+            compressedMissing = compressedMap.isEmpty ? shownPIDs.count : shownPIDs.filter { compressedMap[$0] == nil }.count
         }
 
         // --- Tabs section ---
@@ -71,7 +69,7 @@ public struct SnapshotBuilder {
         return MemorySnapshot(topApps: topApps, appsStatus: appsStatus,
                               unreadableProcessCount: unreadable, swap: swap,
                               compressedUsers: compressedUsers,
-                              compressedUnreadableCount: compressedUnreadable,
+                              compressedUnreadableCount: compressedMissing,
                               swapStatus: swapStatus,
                               topTabs: topTabs, tabsStatus: tabsStatus)
     }

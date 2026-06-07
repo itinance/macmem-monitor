@@ -18,20 +18,15 @@ public struct ProcessSample: Sendable, Equatable, Codable {
     public let footprintBytes: UInt64
     public let residentBytes: UInt64
     public let pageIns: UInt64
-    /// Per-process compressed-memory footprint in bytes, measured via
-    /// task_info(TASK_VM_INFO).compressed. nil when task_for_pid was denied
-    /// (other-user / hardened processes without sudo). This is the swap precursor.
-    public let compressedBytes: UInt64?
     public let isReadable: Bool
 
     public init(pid: Int32, ppid: Int32, responsiblePID: Int32?, bundleID: String?,
                 name: String, executablePath: String?, footprintBytes: UInt64,
-                residentBytes: UInt64, pageIns: UInt64, compressedBytes: UInt64? = nil,
-                isReadable: Bool) {
+                residentBytes: UInt64, pageIns: UInt64, isReadable: Bool) {
         self.pid = pid; self.ppid = ppid; self.responsiblePID = responsiblePID
         self.bundleID = bundleID; self.name = name; self.executablePath = executablePath
         self.footprintBytes = footprintBytes; self.residentBytes = residentBytes
-        self.pageIns = pageIns; self.compressedBytes = compressedBytes; self.isReadable = isReadable
+        self.pageIns = pageIns; self.isReadable = isReadable
     }
 }
 
@@ -65,7 +60,7 @@ public struct SwapInfo: Sendable, Equatable, Codable {
 }
 
 /// A measured per-app compressed-memory total: the sum of
-/// task_info(TASK_VM_INFO).compressed across the app's processes.
+/// CMPRS values from top(1) across the app's processes.
 /// This is NOT an estimate — no proportional attribution is performed.
 public struct CompressedMemoryEntry: Sendable, Equatable, Codable {
     public let appName: String
