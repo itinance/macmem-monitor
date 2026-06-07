@@ -7,6 +7,8 @@ public protocol MemoryProvider: Sendable {
     func listProcesses() throws -> [ProcessSample]
     func readSwap() throws -> SwapInfo
     /// Returns a map of pid → measured compressed bytes from top(1) CMPRS column.
+    /// `throws` for forward-compat: a future sysctl-based source may throw; the current
+    /// top-based impl absorbs all failures internally and returns `[:]` on error.
     func compressedByPID() throws -> [pid_t: UInt64]
 }
 

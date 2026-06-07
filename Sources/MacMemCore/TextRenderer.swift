@@ -58,7 +58,11 @@ public enum TextRenderer {
                 }
             } else if snap.swap != nil {
                 lines.append("")
-                lines.append("Compressed memory per app: none measured.")
+                if snap.compressedAvailable {
+                    lines.append("Compressed memory per app: none measured.")
+                } else {
+                    lines.append("Compressed memory per app: unavailable (could not read from top).")
+                }
             }
         }
 

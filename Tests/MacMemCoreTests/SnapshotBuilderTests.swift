@@ -63,6 +63,16 @@ final class SnapshotBuilderTests: XCTestCase {
         XCTAssertEqual(snap.tabsStatus, .permissionNeeded)
     }
 
+    func testNoSwapSkipsCompressedPathAndLeavesAvailableTrue() {
+        let provider = FakeMemoryProvider(
+            processes: [sample(1, name: "App", bundle: "com.x", footprint: 100)],
+            swap: SwapInfo(totalBytes: 0, usedBytes: 0, freeBytes: 0, swapIns: 0, swapOuts: 0),
+            compressed: [1: 500_000])
+        let snap = SnapshotBuilder(provider: provider, tabSource: nil).build(includeSwap: false)
+        XCTAssertEqual(snap.compressedUsers, [], "no-swap build must yield empty compressedUsers")
+        XCTAssertTrue(snap.compressedAvailable, "compressedAvailable should be neutral true when swap section is skipped")
+    }
+
     func testCompressedMapProducesGroupedAndRankedCompressedUsers() {
         // Two apps: Heavy (pids 1+2) and Light (pid 3)
         let provider = FakeMemoryProvider(

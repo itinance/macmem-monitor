@@ -25,6 +25,7 @@ public struct TopCompressedSource {
             }
             let cols = line.split(whereSeparator: { $0 == " " || $0 == "\t" }).map(String.init).filter { !$0.isEmpty }
             guard cols.count >= 2, let pid = pid_t(cols[0]), let bytes = parseSize(cols[1]) else { continue }
+            // top -l 1 emits each PID exactly once, so last-wins on result[pid] is safe.
             result[pid] = bytes
         }
         return result
@@ -36,6 +37,7 @@ public struct TopCompressedSource {
         let mult: [Character: Double] = ["B": 1, "K": 1024, "M": 1_048_576,
                                          "G": 1_073_741_824, "T": 1_099_511_627_776]
         if let m = mult[last] {
+            // Double(_:) parses period-decimal regardless of locale; top always uses period.
             guard let n = Double(s.dropLast()) else { return nil }
             return UInt64((n * m).rounded())
         }
@@ -50,7 +52,7 @@ public struct TopCompressedSource {
         p.arguments = ["-l", "1", "-stats", "pid,cmprs"]
         let out = Pipe()
         p.standardOutput = out
-        p.standardError = Pipe()
+        p.standardError = FileHandle.nullDevice   // never drain → discard; avoids pipe-fill deadlock
         do { try p.run() } catch { return nil }
         let data = out.fileHandleForReading.readDataToEndOfFile()  // read before wait to avoid deadlock
         p.waitUntilExit()
