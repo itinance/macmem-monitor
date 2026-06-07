@@ -106,6 +106,26 @@ extension BrowserInspectorTests {
         XCTAssertEqual(tabs[1].title, "Beta\textra")        // tab-in-title preserved
     }
 
+    // Regression guard: inside a `tell application "<browser>"` block the bare keyword
+    // `tab` resolves to the app's `tab` *class*, not the tab character — so `& tab &`
+    // emits the literal text "tab" and every output line becomes unparseable. The
+    // delimiter must therefore be bound to `tab` OUTSIDE the tell block and referenced
+    // by variable inside it. (This bug silently produced zero tabs for all browsers.)
+    func testScriptsBindTabDelimiterOutsideTellBlock() {
+        for script in [AppleScriptTabSource.chromiumScript(app: "Brave Browser"),
+                       AppleScriptTabSource.safariScript] {
+            let tellRange = try! XCTUnwrap(script.range(of: "tell application"))
+            let preamble = script[..<tellRange.lowerBound]
+            let body = script[tellRange.lowerBound...]
+            XCTAssertTrue(preamble.contains("set d to tab"),
+                          "delimiter must be bound to `tab` before the tell block")
+            XCTAssertFalse(body.contains("& tab &"),
+                           "must not use the bare `tab` keyword as a separator inside the tell block")
+            XCTAssertTrue(body.contains("& d &"),
+                          "must use the pre-bound delimiter variable inside the tell block")
+        }
+    }
+
     func testRejectsUnsafeBrowserNames() {
         XCTAssertTrue(AppleScriptTabSource.isSafeBrowserName("Brave Browser"))
         XCTAssertTrue(AppleScriptTabSource.isSafeBrowserName("Google Chrome"))
