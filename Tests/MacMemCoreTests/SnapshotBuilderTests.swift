@@ -154,6 +154,26 @@ final class SnapshotBuilderTests: XCTestCase {
                      "Safari total must be nil when WebKit content is not folded into it")
     }
 
+    // Complement to testSafariContentNotAttributableYieldsNilTotal: when no WebKit
+    // content process lives OUTSIDE the Safari group (e.g. under --responsible-pid the
+    // WebContent procs fold into Safari, or Safari simply has no pages loaded), Safari's
+    // total IS attributable and must be the real measured sum — not nil.
+    func testSafariAttributableWhenNoWebContentOutsideGroup() {
+        let safariMain = sample(40, name: "Safari", bundle: "com.apple.Safari", footprint: 200)
+        let provider = FakeMemoryProvider(
+            processes: [safariMain],
+            swap: SwapInfo(totalBytes: 0, usedBytes: 0, freeBytes: 0, swapIns: 0, swapOuts: 0))
+        let tabSource = FakeTabSource(byBrowser: ["Safari": [
+            RawTab(title: "Blank", url: "about:blank", windowIndex: 0, tabIndex: 0)]])
+
+        let snap = SnapshotBuilder(provider: provider, tabSource: tabSource).build(topN: 10)
+
+        let safari = snap.browsers.first { $0.browser == "Safari" }
+        XCTAssertEqual(safari?.totalFootprintBytes, 200,
+                       "Safari total is the real measured sum when no WebContent is unattributed")
+        XCTAssertEqual(safari?.processCount, 1)
+    }
+
     func testPathStyleThreadsThroughToLabels() {
         let provider = FakeMemoryProvider(
             processes: [sample(1, name: "node", bundle: nil, footprint: 100,

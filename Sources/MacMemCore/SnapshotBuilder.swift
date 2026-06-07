@@ -18,15 +18,20 @@ public struct SnapshotBuilder {
     public func build(topN: Int = 10, includeTabs: Bool = true, includeSwap: Bool = true,
                       pathStyle: PathStyle = .shortestUnique) -> MemorySnapshot {
         // --- Apps section ---
+        // Group ALL readable processes once, then slice the top N for the apps list.
+        // The full (un-truncated) grouping is reused by the tabs section so a browser
+        // ranked outside topN still gets its real total — no second grouping pass.
         var topApps: [AppGroup] = []
+        var allGroups: [AppGroup] = []
         var appsStatus: SectionStatus = .ok
         var unreadable = 0
         var samples: [ProcessSample] = []
         do {
             samples = try provider.listProcesses()
             unreadable = samples.filter { !$0.isReadable }.count
-            topApps = AppGrouper().group(samples.filter { $0.isReadable }, topN: topN,
-                                         pathStyle: pathStyle)
+            let readable = samples.filter { $0.isReadable }
+            allGroups = AppGrouper().group(readable, topN: readable.count, pathStyle: pathStyle)
+            topApps = Array(allGroups.prefix(max(0, topN)))
             appsStatus = unreadable > 0 ? .partial : .ok
         } catch {
             appsStatus = .error
@@ -58,7 +63,7 @@ public struct SnapshotBuilder {
         var tabsStatus: SectionStatus = .ok
         if includeTabs {
             if let tabSource {
-                let totals = browserTotals(from: samples, pathStyle: pathStyle)
+                let totals = browserTotals(allGroups: allGroups, from: samples)
                 var hadBrowserErrors = false
                 browsers = BrowserInspector(source: tabSource)
                     .browsers(browserTotals: totals, hadErrors: &hadBrowserErrors)
@@ -80,11 +85,12 @@ public struct SnapshotBuilder {
 
     /// MEASURED total footprint + process count per browser, keyed by display name.
     ///
-    /// Built from a full (un-truncated) grouping so a browser ranked outside the
-    /// TOP APPS topN still gets its real total. A browser's processes fold into a
-    /// single AppGroup named after the browser — Chromium families (Brave, Chrome,
-    /// Edge) by base bundle id — so `group.totalFootprintBytes` IS the whole-browser
-    /// total. This is the same measured figure shown in TOP APPS, never an estimate.
+    /// Derived from `allGroups`, the full (un-truncated) grouping computed once in
+    /// `build()`, so a browser ranked outside the TOP APPS topN still gets its real
+    /// total without a second grouping pass. A browser's processes fold into a single
+    /// AppGroup named after the browser — Chromium families (Brave, Chrome, Edge) by
+    /// base bundle id — so `group.totalFootprintBytes` IS the whole-browser total.
+    /// This is the same measured figure shown in TOP APPS, never an estimate.
     ///
     /// Safari is the documented exception. Its WebKit content processes live in the
     /// system WebKit framework (`com.apple.WebKit.WebContent`), are shared across all
@@ -92,13 +98,11 @@ public struct SnapshotBuilder {
     /// When such content processes exist outside the Safari group, Safari's total is
     /// reported as nil so the renderer states the limitation rather than printing a
     /// misleadingly small number (just the main Safari process).
-    func browserTotals(from samples: [ProcessSample],
-                       pathStyle: PathStyle) -> [String: (bytes: UInt64?, count: Int)] {
-        let readable = samples.filter { $0.isReadable }
-        let allGroups = AppGrouper().group(readable, topN: readable.count, pathStyle: pathStyle)
+    func browserTotals(allGroups: [AppGroup],
+                       from samples: [ProcessSample]) -> [String: (bytes: UInt64?, count: Int)] {
         let groupByName = Dictionary(allGroups.map { ($0.name, $0) }, uniquingKeysWith: { a, _ in a })
-        let webContentPIDs = Set(readable
-            .filter { $0.bundleID == "com.apple.WebKit.WebContent" }
+        let webContentPIDs = Set(samples
+            .filter { $0.isReadable && $0.bundleID == "com.apple.WebKit.WebContent" }
             .map { $0.pid })
 
         var result: [String: (bytes: UInt64?, count: Int)] = [:]
