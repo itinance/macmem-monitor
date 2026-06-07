@@ -1,7 +1,7 @@
 # Directory-Aware Labels for CLI Process Groups — Design
 
 **Date:** 2026-06-07
-**Status:** Approved decisions, pending spec review
+**Status:** Approved
 **Component:** `MacMemCore` (`AppGrouper`, `ProcessSample`, providers, renderers, CLI)
 
 ## Problem
@@ -34,10 +34,9 @@ identity and label.
   (`Models.swift`), but the label still propagates: `CompressedMemoryAggregator.entries`
   copies `group.name` into `entry.appName` from the already-labeled `topApps`. There is
   therefore a **single labeling site** (`AppGrouper`); the aggregator inherits it.
-  Because the aggregator re-ranks and re-cuts `topApps` to its own `topN`, the
-  shortest-unique-suffix computation must run over the full bundle-less cohort *before*
-  any `topN` truncation (see Identity & Label Logic) so suffixes are stable in both
-  sections.
+  (The aggregator re-ranks and re-cuts `topApps` to its own `topN`; the suffix-timing
+  that keeps labels stable across both sections is specified once in Identity & Label
+  Logic.)
 
 ## Decisions (from brainstorming)
 
@@ -169,7 +168,10 @@ helper holds the ellipsis-in-the-middle logic and is unit-tested directly.
   (`-j8 run-api` renders verbatim, not cleaned).
 - `RendererTests` (extend): `middleTruncate` preserves head and trailing token; a
   TOP APPS label over `nameWidthMax` is middle-truncated (trailing argv token survives);
-  the name column auto-sizes to the longest shown label up to the cap.
+  the name column auto-sizes to the longest shown label up to the cap. **Degenerate
+  case:** when the head (`name — `) plus the trailing token alone already exceed the
+  cap, pin the behavior so the process name is never silently dropped (truncate within
+  the token / accept overflow rather than losing the name).
 - `AppGrouperTests` (extend): same name + different cwd → separate groups; same name +
   same cwd → merged; bundle-less + nil cwd → single collapsed bare-name group;
   bundle-ID groups unaffected; `pathStyle: .fullPath` produces `~`-abbreviated labels.
