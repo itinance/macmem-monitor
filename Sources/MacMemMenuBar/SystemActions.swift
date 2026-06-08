@@ -11,7 +11,7 @@ public enum ActionResult: Equatable {
 
 /// All side-effecting operations the menubar app can perform, behind a seam so
 /// the view model stays pure and tests use a fake (no real terminate/purge).
-public protocol SystemActions {
+@MainActor public protocol SystemActions {
     func quit(app: AppGroup) async -> ActionResult
     func purge() async -> ActionResult
     func revealInActivityMonitor(app: AppGroup)
@@ -20,7 +20,7 @@ public protocol SystemActions {
 
 /// Records calls and returns scripted results. Reference type so tests can
 /// inspect it after passing it into a view model.
-public final class FakeSystemActions: SystemActions, @unchecked Sendable {
+public final class FakeSystemActions: SystemActions {
     public var quitResult: ActionResult = .ok
     public var purgeResult: ActionResult = .ok
     public private(set) var quitCalls: [AppGroup] = []

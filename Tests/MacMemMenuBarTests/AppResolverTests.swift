@@ -13,7 +13,7 @@ final class AppResolverTests: XCTestCase {
             AppCandidate(bundleID: "com.other", pid: 11),
         ]
         let g = group(name: "Brave Browser", bundle: "com.brave.Browser", pids: [99])
-        XCTAssertEqual(AppResolver.matchIndex(group: g, candidates: candidates), 0)
+        XCTAssertEqual(AppResolver.match(group: g, candidates: candidates)?.bundleID, "com.brave.Browser")
     }
 
     func testFallsBackToPIDWhenNoBundleMatch() {
@@ -22,12 +22,21 @@ final class AppResolverTests: XCTestCase {
             AppCandidate(bundleID: "com.other", pid: 11),
         ]
         let g = group(name: "node", bundle: nil, pids: [42])
-        XCTAssertEqual(AppResolver.matchIndex(group: g, candidates: candidates), 0)
+        XCTAssertEqual(AppResolver.match(group: g, candidates: candidates)?.pid, 42)
     }
 
     func testReturnsNilWhenNoMatch() {
         let candidates: [AppCandidate] = [AppCandidate(bundleID: "com.other", pid: 11)]
         let g = group(name: "Ghost", bundle: "com.ghost", pids: [7])
-        XCTAssertNil(AppResolver.matchIndex(group: g, candidates: candidates))
+        XCTAssertNil(AppResolver.match(group: g, candidates: candidates))
+    }
+
+    func testFallsBackToPIDWhenBundleSetButUnmatched() {
+        let candidates: [AppCandidate] = [
+            AppCandidate(bundleID: "com.other", pid: 11),
+            AppCandidate(bundleID: nil, pid: 55),
+        ]
+        let g = group(name: "Thing", bundle: "com.thing.absent", pids: [55])
+        XCTAssertEqual(AppResolver.match(group: g, candidates: candidates)?.pid, 55)
     }
 }
