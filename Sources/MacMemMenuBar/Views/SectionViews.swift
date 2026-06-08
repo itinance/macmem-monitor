@@ -19,11 +19,13 @@ struct TopAppsSection: View {
                         Spacer()
                         Text(ByteFormat.string(app.totalFootprintBytes))
                             .foregroundStyle(.secondary).monospacedDigit()
-                        Menu("") {
+                        Menu {
                             Button("Quit \(app.name)…") { onQuit(app) }
                             Button("Reveal in Activity Monitor") { onReveal(app) }
+                        } label: {
+                            Image(systemName: "ellipsis.circle")
                         }
-                        .menuStyle(.borderlessButton).frame(width: 16)
+                        .menuStyle(.borderlessButton).frame(width: 20)
                     }
                 }
                 if snapshot.unreadableProcessCount > 0 {
@@ -49,7 +51,7 @@ struct SwapSection: View {
                 Text("per-app compressed memory unavailable (could not read from top)")
                     .font(.caption2).foregroundStyle(.secondary)
             } else {
-                ForEach(snapshot.compressedUsers.prefix(5), id: \.appName) { e in
+                ForEach(Array(snapshot.compressedUsers.prefix(5)), id: \.appName) { e in
                     HStack {
                         Text(e.appName).lineLimit(1)
                         Spacer()
@@ -76,10 +78,10 @@ struct TabsSection: View {
                     let total = b.totalFootprintBytes.map { ByteFormat.string($0) } ?? "not separately attributable"
                     Text("\(b.browser) — \(total) · \(b.tabs.count) tabs")
                         .font(.callout)
-                    if snapshot.tabsStatus == .partial {
-                        Text("some browsers could not be read.")
-                            .font(.caption2).foregroundStyle(.secondary)
-                    }
+                }
+                if snapshot.tabsStatus == .partial {
+                    Text("some browsers could not be read.")
+                        .font(.caption2).foregroundStyle(.secondary)
                 }
             }
         }

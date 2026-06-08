@@ -15,6 +15,7 @@ struct MacMemMenuBarApp: App {
                 .onDisappear { model.setMenuOpen(false) }
         } label: {
             BarLabel(pressure: model.pressure)
+                .task { model.start() }
         }
         .menuBarExtraStyle(.window)
     }
