@@ -76,4 +76,13 @@ final class MenuViewModelTests: XCTestCase {
         await vm.confirmPending()
         XCTAssertEqual(vm.lastActionMessage, "nope")
     }
+
+    func testNotPermittedActionSetsMessage() async {
+        let actions = FakeSystemActions()
+        actions.purgeResult = .notPermitted
+        let vm = MenuViewModel(provider: makeProvider(), tabSource: nil, actions: actions)
+        vm.requestPurge()
+        await vm.confirmPending()
+        XCTAssertEqual(vm.lastActionMessage, "Not permitted.")
+    }
 }
