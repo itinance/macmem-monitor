@@ -106,6 +106,10 @@ just top                     # quick glance: top 5 apps, no tabs/swap
 just watch 1                 # live-refreshing view, 1s interval
 just sudo-run                # release build, run under sudo (full process coverage)
 
+# MenuBar app (LSUIElement menubar agent)
+just app                # assemble .build/MacMem.app from the release build
+just run-app            # build the bundle and launch it
+
 # Distribution
 just install            # build release + copy binary to {{prefix}}/bin (default /usr/local)
 just prefix=~/.local install   # install to a custom prefix
