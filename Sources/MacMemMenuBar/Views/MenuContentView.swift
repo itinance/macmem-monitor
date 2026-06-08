@@ -38,7 +38,9 @@ struct MenuContentView: View {
                     Text("updated \(updated.formatted(date: .omitted, time: .standard))")
                         .font(.caption2).foregroundStyle(.secondary)
                 }
-                if model.isRefreshing {
+                // Suppressed while the tabs row shows its own "Reading browser tabs…"
+                // spinner, so we never display two spinners at once.
+                if model.isRefreshing && !model.tabsLoading {
                     ProgressView().controlSize(.small)
                 }
             }
