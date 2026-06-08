@@ -22,6 +22,12 @@ final class NativeProviderSmokeTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(swap.totalBytes, swap.usedBytes)
     }
 
+    func testPressureReadsFromLiveKernel() {
+        // kern.memorystatus_vm_pressure_level is readable without entitlements.
+        XCTAssertNotEqual(NativeMemoryProvider().pressure(), .unknown,
+                          "pressure() should read successfully from the live kernel")
+    }
+
     func testReadsWorkingDirectoryForOwnProcess() throws {
         let provider = NativeMemoryProvider()
         let processes = try provider.listProcesses()

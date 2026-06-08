@@ -25,10 +25,12 @@ public struct FakeMemoryProvider: MemoryProvider {
 
     public init(processes: [ProcessSample], swap: SwapInfo,
                 compressed: [pid_t: UInt64] = [:],
-                processError: Error? = nil, swapError: Error? = nil) {
+                processError: Error? = nil, swapError: Error? = nil,
+                pressureValue: MemoryPressure = .normal) {
         self.processes = processes; self.swap = swap
         self.compressed = compressed
         self.processError = processError; self.swapError = swapError
+        self.pressureValue = pressureValue
     }
 
     public func listProcesses() throws -> [ProcessSample] {
