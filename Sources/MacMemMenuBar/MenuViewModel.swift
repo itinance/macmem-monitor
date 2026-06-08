@@ -20,12 +20,10 @@ public final class MenuViewModel: ObservableObject {
 
     private let engine: SnapshotEngine
     private let actions: SystemActions
-    private let topN: Int
 
     public init(provider: MemoryProvider, tabSource: TabSource?,
                 actions: SystemActions, topN: Int = 10) {
         self.actions = actions
-        self.topN = topN
         self.engine = SnapshotEngine(provider: provider, tabSource: tabSource, topN: topN)
         self.engine.onPressure = { [weak self] in self?.pressure = $0 }
         self.engine.onSnapshot = { [weak self] snap in
