@@ -9,7 +9,7 @@ public final class LiveSystemActions: SystemActions {
     public init() {}
 
     /// Snapshot of running apps as pure candidates, for `AppResolver`.
-    public static func currentCandidates() -> [AppCandidate] {
+    static func currentCandidates() -> [AppCandidate] {
         NSWorkspace.shared.runningApplications.map {
             AppCandidate(bundleID: $0.bundleIdentifier, pid: $0.processIdentifier)
         }
