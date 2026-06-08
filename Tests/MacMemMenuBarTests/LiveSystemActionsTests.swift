@@ -4,12 +4,12 @@ import XCTest
 
 @MainActor
 final class LiveSystemActionsTests: XCTestCase {
-    func testCurrentCandidatesIncludeThisProcess() {
-        // The test process itself is a running app; its pid must appear.
-        let candidates = LiveSystemActions.currentCandidates()
-        let mypid = ProcessInfo.processInfo.processIdentifier
-        XCTAssertTrue(candidates.contains { $0.pid == mypid } || !candidates.isEmpty,
-                      "should enumerate running apps (at least non-empty)")
+    func testCurrentCandidatesAreNonEmpty() {
+        // A macOS host running these tests always has GUI apps registered with NSWorkspace
+        // (Finder at minimum), so the candidate enumeration must be non-empty. (The XCTest
+        // runner process is not itself an NSWorkspace app, so we don't assert its own pid.)
+        XCTAssertFalse(LiveSystemActions.currentCandidates().isEmpty,
+                       "should enumerate at least one running GUI application")
     }
 
     func testQuitUnmatchedGroupReturnsNotPermitted() async {
