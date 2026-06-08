@@ -16,7 +16,9 @@ final class SnapshotEngineLiveTests: XCTestCase {
         engine.onSnapshot = { delivered = $0 }
         engine.setMode(.open)
         await engine.tick()
+        // Delivery alone proves the no-deadlock objective. We deliberately do NOT assert
+        // topApps is non-empty: that couples the test to the host having visible processes,
+        // which can be false on minimal/headless CI runners.
         XCTAssertNotNil(delivered, "open-mode tick must deliver a snapshot via onSnapshot")
-        XCTAssertFalse(delivered?.topApps.isEmpty ?? true, "the live machine has running apps")
     }
 }

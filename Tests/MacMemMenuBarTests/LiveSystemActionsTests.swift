@@ -4,12 +4,15 @@ import XCTest
 
 @MainActor
 final class LiveSystemActionsTests: XCTestCase {
-    func testCurrentCandidatesAreNonEmpty() {
-        // A macOS host running these tests always has GUI apps registered with NSWorkspace
-        // (Finder at minimum), so the candidate enumeration must be non-empty. (The XCTest
-        // runner process is not itself an NSWorkspace app, so we don't assert its own pid.)
-        XCTAssertFalse(LiveSystemActions.currentCandidates().isEmpty,
-                       "should enumerate at least one running GUI application")
+    func testCurrentCandidatesAreNonEmpty() throws {
+        // A macOS host with a GUI session has apps registered with NSWorkspace (Finder at
+        // minimum). Headless CI runners may have none, so skip there rather than fail; when
+        // candidates exist they must carry valid pids. (The XCTest runner process is not
+        // itself an NSWorkspace app, so we don't assert its own pid.)
+        let candidates = LiveSystemActions.currentCandidates()
+        try XCTSkipIf(candidates.isEmpty, "No GUI session detected on this runner.")
+        XCTAssertTrue(candidates.allSatisfy { $0.pid > 0 },
+                      "enumerated candidates should carry valid process identifiers")
     }
 
     func testQuitUnmatchedGroupReturnsNotPermitted() async {
