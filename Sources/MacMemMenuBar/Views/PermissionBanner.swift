@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 /// A small inline banner with an optional action button. Used for the
 /// Automation-denied case and the "N processes unreadable" note.

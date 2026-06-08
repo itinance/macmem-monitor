@@ -46,6 +46,8 @@ struct SwapSection: View {
             if let swap = snapshot.swap {
                 Text("Used \(ByteFormat.string(swap.usedBytes)) / \(ByteFormat.string(swap.totalBytes))")
                     .monospacedDigit()
+            } else {
+                Text("Swap data unavailable.").font(.callout).foregroundStyle(.secondary)
             }
             if !snapshot.compressedAvailable {
                 Text("per-app compressed memory unavailable (could not read from top)")

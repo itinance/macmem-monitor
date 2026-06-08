@@ -2,7 +2,7 @@ import Foundation
 import MacMemCore
 
 /// Outcome of a user-triggered action.
-public enum ActionResult: Equatable {
+public enum ActionResult: Equatable, Sendable {
     case ok
     case cancelled
     case failed(String)
