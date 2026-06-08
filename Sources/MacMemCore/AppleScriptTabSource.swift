@@ -108,4 +108,5 @@ enum TabError: Error {
     case compileFailed
     case execFailed(String)
     case unsafeBrowserName(String)
+    case timedOut
 }
