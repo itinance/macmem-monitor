@@ -96,3 +96,21 @@ ci: release test
 # Print the resolved release binary path.
 bin-path:
     @echo "$(swift build -c release --show-bin-path)/macmem"
+
+# ---------------------------------------------------------------------------
+# MenuBar app bundle
+# ---------------------------------------------------------------------------
+
+# Assemble MacMem.app from the release build (LSUIElement menubar agent).
+app:
+    swift build -c release --product MacMemMenuBar
+    rm -rf .build/MacMem.app
+    mkdir -p .build/MacMem.app/Contents/MacOS
+    cp Resources/MenuBar/Info.plist.template .build/MacMem.app/Contents/Info.plist
+    cp .build/release/MacMemMenuBar .build/MacMem.app/Contents/MacOS/MacMemMenuBar
+    codesign --force --sign - .build/MacMem.app
+    @echo "Built .build/MacMem.app"
+
+# Build the bundle and launch it.
+run-app: app
+    open .build/MacMem.app
