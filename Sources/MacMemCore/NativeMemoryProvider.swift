@@ -90,6 +90,16 @@ public struct NativeMemoryProvider: MemoryProvider {
         return (info.ri_phys_footprint, info.ri_resident_size, info.ri_pageins)
     }
 
+    // MARK: Memory pressure
+
+    public func pressure() -> MemoryPressure {
+        var level: Int32 = 0
+        var size = MemoryLayout<Int32>.size
+        let rc = sysctlbyname("kern.memorystatus_vm_pressure_level", &level, &size, nil, 0)
+        guard rc == 0 else { return .unknown }
+        return MemoryPressure(rawLevel: level)
+    }
+
     // MARK: Compressed memory (via top)
 
     public func compressedByPID() throws -> [pid_t: UInt64] {
