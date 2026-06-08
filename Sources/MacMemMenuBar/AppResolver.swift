@@ -14,14 +14,14 @@ public struct AppCandidate: Equatable {
 
 /// Pure logic for resolving which running app an `AppGroup` refers to.
 public enum AppResolver {
-    /// Returns the index of the first candidate matching the group, or nil.
-    /// Prefers a bundle-id match; falls back to a pid contained in the group.
-    public static func matchIndex(group: AppGroup, candidates: [AppCandidate]) -> Int? {
+    /// Returns the running candidate the group refers to, or nil.
+    /// Prefers a bundle-id match; falls back to a candidate whose pid is in the group.
+    public static func match(group: AppGroup, candidates: [AppCandidate]) -> AppCandidate? {
         if let bundle = group.bundleID,
-           let i = candidates.firstIndex(where: { $0.bundleID == bundle }) {
-            return i
+           let c = candidates.first(where: { $0.bundleID == bundle }) {
+            return c
         }
         let groupPIDs = Set(group.pids)
-        return candidates.firstIndex(where: { groupPIDs.contains($0.pid) })
+        return candidates.first(where: { groupPIDs.contains($0.pid) })
     }
 }

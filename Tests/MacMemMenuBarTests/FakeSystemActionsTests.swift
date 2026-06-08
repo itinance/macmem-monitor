@@ -2,7 +2,7 @@ import XCTest
 @testable import MacMemMenuBar
 @testable import MacMemCore
 
-final class FakeSystemActionsTests: XCTestCase {
+@MainActor final class FakeSystemActionsTests: XCTestCase {
     private func group(_ name: String) -> AppGroup {
         AppGroup(name: name, bundleID: "com.x", totalFootprintBytes: 1, processCount: 1, pids: [1])
     }
