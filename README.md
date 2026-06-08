@@ -120,6 +120,39 @@ just bin-path           # print the resolved release binary path
 just ci                 # mirror CI: clean release build + full test suite
 ```
 
+## Releasing the menubar app
+
+The menubar app (`MacMem.app`) ships as a Homebrew cask
+(`brew install --cask itinance/tap/macmem-monitor`). `just app` produces an
+*ad-hoc* signed bundle for local use; release builds must be **Developer
+ID-signed and notarized** so users don't hit Gatekeeper.
+
+**One-time setup:**
+
+1. Create a **Developer ID Application** certificate (Xcode → Settings →
+   Accounts → your team → Manage Certificates → `+` → *Developer ID
+   Application*). This is distinct from "Apple Development"/"Apple Distribution"
+   certs — only Developer ID can notarize a direct download. For an
+   organization account, the **Account Holder** must create it.
+2. Store a notarytool credential as a keychain profile (using an
+   [app-specific password](https://support.apple.com/102654) or an App Store
+   Connect API key):
+
+   ```bash
+   xcrun notarytool store-credentials "macmem-notary" \
+     --apple-id you@example.com --team-id 87HR586LH8 --password <app-specific-pw>
+   ```
+
+**Cutting a release:**
+
+```bash
+just release-app          # signs (hardened runtime), notarizes, staples; prints sha256
+```
+
+Then attach `.build/MacMem.app.zip` to a GitHub Release tagged `app-vX.Y.Z` and
+update `version` + `sha256` in the tap's `Casks/macmem-monitor.rb`. A notarized
+build means the cask no longer needs the `xattr` quarantine caveat.
+
 ## License
 
 MIT — see [LICENSE](LICENSE).

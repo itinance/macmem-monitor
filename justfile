@@ -114,3 +114,37 @@ app:
 # Build the bundle and launch it.
 run-app: app
     open .build/MacMem.app
+
+# ---------------------------------------------------------------------------
+# Signed + notarized release of the MenuBar app (for the Homebrew cask)
+# ---------------------------------------------------------------------------
+# Requires a one-time setup (see README "Releasing the menubar app"):
+#   1. A "Developer ID Application" certificate in your login keychain.
+#   2. A notarytool credential stored as a keychain profile, e.g.:
+#        xcrun notarytool store-credentials "{{notary_profile}}" \
+#          --apple-id you@example.com --team-id 87HR586LH8 --password <app-specific-pw>
+
+# Developer ID identity used to sign release builds. Override on the CLI if needed.
+signing_id := "Developer ID Application: ITinance GmbH (87HR586LH8)"
+# notarytool keychain profile name created via `xcrun notarytool store-credentials`.
+notary_profile := "macmem-notary"
+
+# Developer ID-sign (hardened runtime) + notarize + staple MacMem.app -> .build/MacMem.app.zip (+sha256).
+release-app:
+    swift build -c release --product MacMemMenuBar
+    rm -rf .build/MacMem.app
+    mkdir -p .build/MacMem.app/Contents/MacOS
+    cp Resources/MenuBar/Info.plist.template .build/MacMem.app/Contents/Info.plist
+    cp .build/release/MacMemMenuBar .build/MacMem.app/Contents/MacOS/MacMemMenuBar
+    codesign --force --options runtime --timestamp \
+        --entitlements Resources/MenuBar/MacMem.entitlements \
+        --sign "{{signing_id}}" .build/MacMem.app
+    codesign --verify --strict --verbose=2 .build/MacMem.app
+    rm -f .build/MacMem.app.zip
+    ditto -c -k --keepParent .build/MacMem.app .build/MacMem.app.zip
+    xcrun notarytool submit .build/MacMem.app.zip --keychain-profile "{{notary_profile}}" --wait
+    xcrun stapler staple .build/MacMem.app
+    rm -f .build/MacMem.app.zip
+    ditto -c -k --keepParent .build/MacMem.app .build/MacMem.app.zip
+    @echo "Notarized + stapled -> .build/MacMem.app.zip"
+    @shasum -a 256 .build/MacMem.app.zip
