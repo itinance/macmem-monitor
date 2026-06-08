@@ -1,3 +1,4 @@
+import Darwin
 import XCTest
 @testable import MacMemCore
 
@@ -20,6 +21,28 @@ final class NativeProviderSmokeTests: XCTestCase {
         let swap = try NativeMemoryProvider().readSwap()
         // total >= used; counters are non-negative by type. Just assert it returns.
         XCTAssertGreaterThanOrEqual(swap.totalBytes, swap.usedBytes)
+    }
+
+    func testPressureReadsFromLiveKernel() {
+        // kern.memorystatus_vm_pressure_level is readable without entitlements. Assert the
+        // mapping matches the RAW kernel value rather than `!= .unknown`: a future kernel
+        // could report a level outside {1,2,4} that legitimately maps to .unknown, which
+        // would spuriously fail a hard-coded inequality.
+        var raw: Int32 = 0
+        var size = MemoryLayout<Int32>.size
+        let rc = sysctlbyname("kern.memorystatus_vm_pressure_level", &raw, &size, nil, 0)
+
+        let mapped = NativeMemoryProvider().pressure()
+        guard rc == 0, size == MemoryLayout<Int32>.size else {
+            XCTAssertEqual(mapped, .unknown, "a failed sysctl read must map to .unknown")
+            return
+        }
+        switch raw {
+        case 1: XCTAssertEqual(mapped, .normal)
+        case 2: XCTAssertEqual(mapped, .warn)
+        case 4: XCTAssertEqual(mapped, .critical)
+        default: XCTAssertEqual(mapped, .unknown)
+        }
     }
 
     func testReadsWorkingDirectoryForOwnProcess() throws {

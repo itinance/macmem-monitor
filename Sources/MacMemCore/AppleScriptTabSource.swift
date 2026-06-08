@@ -83,21 +83,12 @@ public struct AppleScriptTabSource: TabSource {
         return out
         """
 
+    /// Runs on a dedicated AppleScript thread (see `AppleScriptExecutor`), NEVER the main
+    /// thread: enumerating hundreds of tabs takes seconds and doing it on main froze the
+    /// menu. The tab pass already runs inside a detached task, so blocking here blocks only
+    /// that background thread.
     private func runAppleScript(_ source: String) throws -> String {
-        if Thread.isMainThread {
-            return try executeAppleScript(source)
-        } else {
-            // NSAppleScript is main-thread-affined; hop to main when called off-main.
-            return try DispatchQueue.main.sync { try executeAppleScript(source) }
-        }
-    }
-
-    private func executeAppleScript(_ source: String) throws -> String {
-        var error: NSDictionary?
-        guard let script = NSAppleScript(source: source) else { throw TabError.compileFailed }
-        let result = script.executeAndReturnError(&error)
-        if let error { throw TabError.execFailed(String(describing: error)) }
-        return result.stringValue ?? ""
+        try AppleScriptExecutor.shared.run(source)
     }
 
     static func parse(_ raw: String) -> [RawTab] {
@@ -117,4 +108,5 @@ enum TabError: Error {
     case compileFailed
     case execFailed(String)
     case unsafeBrowserName(String)
+    case timedOut
 }

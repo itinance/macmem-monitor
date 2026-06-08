@@ -10,6 +10,9 @@ public protocol MemoryProvider: Sendable {
     /// `throws` for forward-compat: a future sysctl-based source may throw; the current
     /// top-based impl absorbs all failures internally and returns `[:]` on error.
     func compressedByPID() throws -> [pid_t: UInt64]
+    /// Current OS memory-pressure level. Non-throwing: returns `.unknown` on any
+    /// failure so the UI never shows a fabricated level.
+    func pressure() -> MemoryPressure
 }
 
 public struct FakeMemoryProvider: MemoryProvider {
@@ -18,13 +21,16 @@ public struct FakeMemoryProvider: MemoryProvider {
     public var compressed: [pid_t: UInt64]
     public var processError: Error?
     public var swapError: Error?
+    public var pressureValue: MemoryPressure = .normal
 
     public init(processes: [ProcessSample], swap: SwapInfo,
                 compressed: [pid_t: UInt64] = [:],
-                processError: Error? = nil, swapError: Error? = nil) {
+                processError: Error? = nil, swapError: Error? = nil,
+                pressureValue: MemoryPressure = .normal) {
         self.processes = processes; self.swap = swap
         self.compressed = compressed
         self.processError = processError; self.swapError = swapError
+        self.pressureValue = pressureValue
     }
 
     public func listProcesses() throws -> [ProcessSample] {
@@ -38,4 +44,5 @@ public struct FakeMemoryProvider: MemoryProvider {
     public func compressedByPID() throws -> [pid_t: UInt64] {
         compressed
     }
+    public func pressure() -> MemoryPressure { pressureValue }
 }
