@@ -3,6 +3,9 @@ import XCTest
 @testable import MacMemCore
 
 /// Counts which provider methods get called so we can assert the engine's mode behavior.
+// @unchecked Sendable: the counters are mutated from the detached snapshot task and
+// read on the main actor only AFTER `await tick()` returns. The await establishes a
+// happens-before edge (tick awaits the detached task's `.value`), so there is no race.
 private final class SpyProvider: MemoryProvider, @unchecked Sendable {
     private(set) var pressureCalls = 0
     private(set) var listCalls = 0
@@ -56,9 +59,9 @@ final class SnapshotEngineTests: XCTestCase {
     func testIntervalSwitchesWithMode() {
         let spy = SpyProvider()
         let engine = SnapshotEngine(provider: spy, tabSource: nil, topN: 10)
-        engine.setMenuOpen(false)
+        engine.setMode(.collapsed)
         XCTAssertEqual(engine.currentInterval, 5.0, accuracy: 0.001)
-        engine.setMenuOpen(true)
+        engine.setMode(.open)
         XCTAssertEqual(engine.currentInterval, 2.5, accuracy: 0.001)
     }
 }

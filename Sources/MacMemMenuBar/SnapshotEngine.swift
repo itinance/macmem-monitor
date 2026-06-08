@@ -32,12 +32,18 @@ public final class SnapshotEngine {
         self.topN = topN
     }
 
+    /// Reschedule the timer at the current interval and tick once immediately so the
+    /// UI reflects the new mode without waiting a full interval.
+    private func scheduleAndTickNow() {
+        scheduleTimer()
+        Task { await tick() }
+    }
+
     /// Switch modes, reschedule the timer at the new interval, and tick once now
     /// so the UI updates immediately on open/close instead of after a full delay.
     public func setMenuOpen(_ open: Bool) {
         mode = open ? .open : .collapsed
-        scheduleTimer()
-        Task { await tick() }
+        scheduleAndTickNow()
     }
 
     /// Switch modes without triggering an immediate tick. Intended for tests
@@ -46,15 +52,14 @@ public final class SnapshotEngine {
     /// would otherwise race with the test's own explicit `await engine.tick()`.
     ///
     /// Production code should use `setMenuOpen(_:)` so the UI updates immediately.
-    public func setMode(_ newMode: Mode) {
+    func setMode(_ newMode: Mode) {
         mode = newMode
         scheduleTimer()
     }
 
     /// Start sampling (called once when the app launches).
     public func start() {
-        scheduleTimer()
-        Task { await tick() }
+        scheduleAndTickNow()
     }
 
     public func stop() {
