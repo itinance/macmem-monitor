@@ -1,5 +1,3 @@
-import Foundation
-
 /// Real OS memory-pressure level, read from `kern.memorystatus_vm_pressure_level`.
 /// Never inferred or faked: an unreadable/unexpected value maps to `.unknown`,
 /// which the UI renders as a neutral (un-tinted) state rather than a fake "green".

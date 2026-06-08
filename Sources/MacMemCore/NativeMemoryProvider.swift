@@ -96,7 +96,7 @@ public struct NativeMemoryProvider: MemoryProvider {
         var level: Int32 = 0
         var size = MemoryLayout<Int32>.size
         let rc = sysctlbyname("kern.memorystatus_vm_pressure_level", &level, &size, nil, 0)
-        guard rc == 0 else { return .unknown }
+        guard rc == 0, size == MemoryLayout<Int32>.size else { return .unknown }
         return MemoryPressure(rawLevel: level)
     }
 
