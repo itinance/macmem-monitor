@@ -69,12 +69,21 @@ struct SwapSection: View {
 /// BROWSER TABS — per-browser measured total + tab list.
 struct TabsSection: View {
     let snapshot: MemorySnapshot
+    /// The first tab enumeration is still running and nothing is cached yet — show a
+    /// spinner instead of an empty list, which would read as a misleading "no tabs".
+    var tabsLoading: Bool = false
+
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             Text("BROWSER TABS").font(.caption).foregroundStyle(.secondary)
             if snapshot.tabsStatus == .permissionNeeded {
                 PermissionBanner(text: "Allow Automation to read browser tabs.",
                                  actionTitle: "Open Settings", action: openAutomationSettings)
+            } else if tabsLoading && snapshot.browsers.isEmpty {
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.small)
+                    Text("Reading browser tabs…").font(.callout).foregroundStyle(.secondary)
+                }
             } else {
                 ForEach(snapshot.browsers, id: \.browser) { b in
                     let total = b.totalFootprintBytes.map { ByteFormat.string($0) } ?? "not separately attributable"

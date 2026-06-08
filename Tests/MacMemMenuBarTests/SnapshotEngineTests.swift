@@ -19,6 +19,16 @@ private final class SpyProvider: MemoryProvider, @unchecked Sendable {
     func pressure() -> MemoryPressure { pressureCalls += 1; return pressureValue }
 }
 
+/// Counts tab enumerations so we can assert the engine throttles the expensive
+/// browser-tab pass. @unchecked Sendable for the same reason as SpyProvider: the
+/// counter is mutated inside the detached snapshot task and read only after the
+/// awaited `tick()` returns, which establishes a happens-before edge.
+private final class CountingTabSource: TabSource, @unchecked Sendable {
+    private(set) var runningBrowsersCalls = 0
+    func runningBrowsers() -> [String] { runningBrowsersCalls += 1; return [] }
+    func tabs(for browser: String) throws -> [RawTab] { [] }
+}
+
 @MainActor
 final class SnapshotEngineTests: XCTestCase {
     func testCollapsedTickReadsOnlyPressure() async {
@@ -54,6 +64,24 @@ final class SnapshotEngineTests: XCTestCase {
         XCTAssertEqual(spy.pressureCalls, 1, "open mode still updates pressure")
         XCTAssertEqual(spy.listCalls, 1, "open mode builds a full snapshot")
         XCTAssertNotNil(gotSnapshot)
+    }
+
+    func testOpenTickThrottlesBrowserTabReads() async {
+        // Browser-tab enumeration is the expensive part of a snapshot, so the engine
+        // refreshes it at most every `tabInterval`, not on every open-mode tick. Two
+        // back-to-back ticks should read tabs exactly once.
+        let spy = SpyProvider()
+        let tabs = CountingTabSource()
+        let engine = SnapshotEngine(provider: spy, tabSource: tabs, topN: 10)
+
+        engine.setMode(.open)
+        await engine.tick()
+        await engine.tick()
+
+        XCTAssertEqual(tabs.runningBrowsersCalls, 1,
+                       "tabs must be read once, then throttled within tabInterval")
+        XCTAssertEqual(spy.listCalls, 3,
+                       "tick 1: fast build + full build; tick 2: fast build only (tabs throttled)")
     }
 
     func testIntervalSwitchesWithMode() {

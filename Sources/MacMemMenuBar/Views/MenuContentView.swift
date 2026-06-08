@@ -14,9 +14,12 @@ struct MenuContentView: View {
                 Divider()
                 SwapSection(snapshot: snapshot)
                 Divider()
-                TabsSection(snapshot: snapshot)
+                TabsSection(snapshot: snapshot, tabsLoading: model.tabsLoading)
             } else {
-                Text("Measuring…").foregroundStyle(.secondary)
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text("Measuring memory…").foregroundStyle(.secondary)
+                }
             }
 
             if let msg = model.lastActionMessage {
@@ -30,9 +33,14 @@ struct MenuContentView: View {
                 Spacer()
                 Button("Quit macmem") { NSApplication.shared.terminate(nil) }
             }
-            if let updated = model.lastUpdated {
-                Text("updated \(updated.formatted(date: .omitted, time: .standard))")
-                    .font(.caption2).foregroundStyle(.secondary)
+            HStack(spacing: 6) {
+                if let updated = model.lastUpdated {
+                    Text("updated \(updated.formatted(date: .omitted, time: .standard))")
+                        .font(.caption2).foregroundStyle(.secondary)
+                }
+                if model.isRefreshing {
+                    ProgressView().controlSize(.small)
+                }
             }
         }
         .padding(12)

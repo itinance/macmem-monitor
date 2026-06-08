@@ -17,6 +17,10 @@ public final class MenuViewModel: ObservableObject {
     @Published public private(set) var lastUpdated: Date?
     @Published public var pendingConfirmation: PendingConfirmation?
     @Published public private(set) var lastActionMessage: String?
+    /// A sampling cycle is in flight — drives a subtle "refreshing" cue.
+    @Published public private(set) var isRefreshing = false
+    /// The first browser-tab read hasn't completed yet — drives the tabs spinner.
+    @Published public private(set) var tabsLoading = false
 
     private let engine: SnapshotEngine
     private let actions: SystemActions
@@ -30,6 +34,8 @@ public final class MenuViewModel: ObservableObject {
             self?.snapshot = snap
             self?.lastUpdated = Date()
         }
+        self.engine.onRefreshChange = { [weak self] in self?.isRefreshing = $0 }
+        self.engine.onTabsLoadingChange = { [weak self] in self?.tabsLoading = $0 }
     }
 
     // MARK: Lifecycle
