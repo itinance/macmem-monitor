@@ -1,11 +1,10 @@
 import SwiftUI
 import MacMemCore
 
-/// TOP APPS rows. Tapping a row opens a per-row menu (quit / reveal) via callbacks.
+/// TOP APPS rows. Tapping a row's menu offers Quit via a callback.
 struct TopAppsSection: View {
     let snapshot: MemorySnapshot
     let onQuit: (AppGroup) -> Void
-    let onReveal: (AppGroup) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -21,7 +20,6 @@ struct TopAppsSection: View {
                             .foregroundStyle(.secondary).monospacedDigit()
                         Menu {
                             Button("Quit \(app.name)…") { onQuit(app) }
-                            Button("Reveal in Activity Monitor") { onReveal(app) }
                         } label: {
                             Image(systemName: "ellipsis.circle")
                         }

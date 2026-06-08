@@ -53,13 +53,6 @@ public final class LiveSystemActions: SystemActions {
         }.value
     }
 
-    public func revealInActivityMonitor(app: AppGroup) {
-        // `app` is not used to pre-select a process — no per-pid deep link into Activity
-        // Monitor exists — so we just open it to its default view (honest, not faked).
-        let url = URL(fileURLWithPath: "/System/Applications/Utilities/Activity Monitor.app")
-        NSWorkspace.shared.openApplication(at: url, configuration: .init())
-    }
-
     public func copySnapshot(_ text: String) {
         let pb = NSPasteboard.general
         pb.clearContents()

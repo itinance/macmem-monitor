@@ -21,11 +21,9 @@ import XCTest
         XCTAssertEqual(fake.purgeCallCount, 1)
     }
 
-    func testRecordsRevealAndCopy() {
+    func testRecordsCopy() {
         let fake = FakeSystemActions()
-        fake.revealInActivityMonitor(app: group("A"))
         fake.copySnapshot("hello")
-        XCTAssertEqual(fake.revealCalls.map(\.name), ["A"])
         XCTAssertEqual(fake.copiedText, "hello")
     }
 }

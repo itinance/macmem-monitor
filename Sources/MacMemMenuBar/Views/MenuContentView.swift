@@ -9,8 +9,7 @@ struct MenuContentView: View {
         VStack(alignment: .leading, spacing: 10) {
             if let snapshot = model.snapshot {
                 TopAppsSection(snapshot: snapshot,
-                               onQuit: { model.requestQuit($0) },
-                               onReveal: { model.reveal($0) })
+                               onQuit: { model.requestQuit($0) })
                 Divider()
                 SwapSection(snapshot: snapshot)
                 Divider()
@@ -43,6 +42,9 @@ struct MenuContentView: View {
                 if model.isRefreshing && !model.tabsLoading {
                     ProgressView().controlSize(.small)
                 }
+                Spacer()
+                Link("tardis.sh", destination: URL(string: "https://tardis.sh")!)
+                    .font(.caption2)
             }
         }
         .padding(12)

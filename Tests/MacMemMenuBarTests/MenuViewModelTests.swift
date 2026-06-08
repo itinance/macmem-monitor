@@ -61,13 +61,6 @@ final class MenuViewModelTests: XCTestCase {
                       "copied text should be the CLI TextRenderer output")
     }
 
-    func testRevealForwardsToActions() {
-        let actions = FakeSystemActions()
-        let vm = MenuViewModel(provider: makeProvider(), tabSource: nil, actions: actions)
-        vm.reveal(group("A"))
-        XCTAssertEqual(actions.revealCalls.map(\.name), ["A"])
-    }
-
     func testFailedActionSurfacesMessage() async {
         let actions = FakeSystemActions()
         actions.purgeResult = .failed("nope")

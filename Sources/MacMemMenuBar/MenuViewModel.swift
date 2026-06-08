@@ -60,8 +60,6 @@ public final class MenuViewModel: ObservableObject {
         applyResult(result)
     }
 
-    public func reveal(_ app: AppGroup) { actions.revealInActivityMonitor(app: app) }
-
     public func copySnapshot() {
         guard let snapshot else { return }
         actions.copySnapshot(TextRenderer.render(snapshot))

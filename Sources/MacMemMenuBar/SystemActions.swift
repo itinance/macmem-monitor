@@ -14,7 +14,6 @@ public enum ActionResult: Equatable, Sendable {
 @MainActor public protocol SystemActions {
     func quit(app: AppGroup) async -> ActionResult
     func purge() async -> ActionResult
-    func revealInActivityMonitor(app: AppGroup)
     func copySnapshot(_ text: String)
 }
 
@@ -25,7 +24,6 @@ public final class FakeSystemActions: SystemActions {
     public var purgeResult: ActionResult = .ok
     public private(set) var quitCalls: [AppGroup] = []
     public private(set) var purgeCallCount = 0
-    public private(set) var revealCalls: [AppGroup] = []
     public private(set) var copiedText: String?
 
     public init() {}
@@ -36,6 +34,5 @@ public final class FakeSystemActions: SystemActions {
     public func purge() async -> ActionResult {
         purgeCallCount += 1; return purgeResult
     }
-    public func revealInActivityMonitor(app: AppGroup) { revealCalls.append(app) }
     public func copySnapshot(_ text: String) { copiedText = text }
 }
